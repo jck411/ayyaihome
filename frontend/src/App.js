@@ -17,7 +17,8 @@ const ChatWebsite = () => {
     e.preventDefault();
     if (!input.trim()) return;
 
-    const userMessage = { id: messages.length + 1, text: input, sender: "user" };
+    const timestamp = new Date().toLocaleTimeString();
+    const userMessage = { id: messages.length + 1, text: input, sender: "user", timestamp };
     setMessages([...messages, userMessage]);
     setInput("");
     setStatus("Listening...");
@@ -34,7 +35,7 @@ const ChatWebsite = () => {
           if (existingAssistantMessage) {
             existingAssistantMessage.text = content;
           } else {
-            updatedMessages.push({ id: userMessage.id + 1, text: content, sender: "assistant" });
+            updatedMessages.push({ id: userMessage.id + 1, text: content, sender: "assistant", timestamp: new Date().toLocaleTimeString() });
           }
 
           return updatedMessages;

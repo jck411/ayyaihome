@@ -42,6 +42,7 @@ const MessageList = ({ messages }) => {
         <div key={message.id} className={`mb-2 ${message.sender === 'user' ? 'text-light-text dark:text-dark-text' : 'text-green-500'}`}>
           <span className="font-bold">{message.sender}: </span>
           {renderMessageContent(message.text)}
+          <span className="block text-xs text-gray-500">{message.timestamp}</span>
         </div>
       ))}
       <div ref={messagesEndRef} />
