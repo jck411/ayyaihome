@@ -1,8 +1,21 @@
-# Ignore environment variable files
+# Node.js dependencies
+node_modules/
+
+# Logs
+logs
+*.log
+
+# Python environment
+aihome/
+__pycache__/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Environment variables
 .env
 
-# Ignore Google credentials
-pihome123-1977ff6ae736.json
+# Google key
+/backend/pihome123-1977ff6ae736.json
 
-# Ignore node_modules directory
-node_modules/
