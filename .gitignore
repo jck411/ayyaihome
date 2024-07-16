@@ -1,0 +1,8 @@
+# Ignore environment variable files
+.env
+
+# Ignore Google credentials
+pihome123-1977ff6ae736.json
+
+# Ignore node_modules directory
+node_modules/
