@@ -1,4 +1,12 @@
-/* src/index.css */
+:root {
+  --contrast-orange: #ff4f00;
+  --dark-bg: #1D1F21;
+  --dark-text: #E5E6E7;
+  --light-bg: #2E3B4E;
+  --light-text: #F5F5F5;
+}
+
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -16,4 +24,18 @@ body {
 code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
+}
+/* Custom scrollbar styles */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: #ff4f00;
+  border-radius: 10px;
+  border: 2px solid transparent;
 }

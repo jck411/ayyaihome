@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import CodeBlock from './CodeBlock';
 
 const renderMessageContent = (content) => {
@@ -26,6 +26,16 @@ const renderMessageContent = (content) => {
 };
 
 const MessageList = ({ messages }) => {
+  const messagesEndRef = useRef(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
   return (
     <div className="flex-grow overflow-y-auto mb-4 p-4">
       {messages.map((message) => (
@@ -34,6 +44,7 @@ const MessageList = ({ messages }) => {
           {renderMessageContent(message.text)}
         </div>
       ))}
+      <div ref={messagesEndRef} />
     </div>
   );
 };

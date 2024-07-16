@@ -8,10 +8,10 @@ const MessageInput = ({ input, setInput, sendMessage, darkMode }) => {
         type="text"
         value={input}
         onChange={(e) => setInput(e.target.value)}
-        className={`flex-grow p-2 rounded-l-lg ${darkMode ? 'bg-dark-bg text-dark-text' : 'bg-light-bg text-light-text'}`}
+        className={`flex-grow p-2 rounded-l-lg border border-contrast-orange focus:border-contrast-orange focus:ring-contrast-orange focus:ring-2 focus:outline-none ${darkMode ? 'bg-dark-bg text-dark-text' : 'bg-light-bg text-light-text'}`}
         placeholder="Type your message..."
       />
-      <button type="submit" className="bg-dark-primary dark:bg-light-primary text-white p-2 rounded-r-lg">
+      <button type="submit" className="bg-contrast-orange text-white p-2 rounded-r-lg">
         <Send className="w-6 h-6" />
       </button>
     </form>

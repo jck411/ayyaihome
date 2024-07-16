@@ -6,13 +6,15 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        'dark-bg': '#1D1F21',       // Dark mode background
-        'dark-text': '#E5E6E7',     // Dark mode text
-        'dark-primary': '#FFAB00',  // Dark mode primary (e.g., status indicator, buttons)
+        'dark-bg': 'var(--dark-bg)',       // Dark mode background
+        'dark-text': 'var(--dark-text)',   // Dark mode text
+        'dark-primary': 'var(--contrast-orange)',  // Dark mode primary (new orange)
 
-        'light-bg': '#2E3B4E',      // Darker light mode background
-        'light-text': '#F5F5F5',    // Darker light mode text
-        'light-primary': '#FFAB00', // Light mode primary (e.g., status indicator, buttons)
+        'light-bg': 'var(--light-bg)',     // Darker light mode background
+        'light-text': 'var(--light-text)', // Darker light mode text
+        'light-primary': 'var(--contrast-orange)', // Light mode primary (new orange)
+
+        'contrast-orange': 'var(--contrast-orange)' // Unified contrasting new orange color
       },
     },
   },

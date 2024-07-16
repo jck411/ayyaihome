@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "pihome123",
+  "private_key_id": "0ce119dee066ca60c59978d76c41814323b4dbe3",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC0uBBneXulDuO7\neeQimTtOlGResYj9GXN7kvaJp4FhMyDmy5kI7v/zpYMAwQUwl0dAxigk+QZSxs7O\n5wOfUXI6Jo2kEdFN29L116Q5hxWX5Ksp8e+w8i/puzlX/cXsspN6WkHuyafFpGQD\ngRBcijKBKDWVI9Jq/hc9Z3rMNhemqceK4+WVo/LqdB5c0OJue+nhV0xUg2XTTusr\n2P8CAx8aEbqpzEqSUIzgeLApJk073JfRGF50csYbwK08FhfVkNPjySJX+jPeeGvi\n/v2Ey4z2HQV6IgN4g390bwKFKOJnhbcjigp8JX0S49VZFje7XHiNhbVhPA4x15ng\nLTgbh5dtAgMBAAECggEAC5uVBihx7jCuJQEXy7ce7ZWveruZinRDjCjs5/uX3lfr\n4ZcrPb0oOIylhPtg63WUEI+JzZInO1Lkvrps66NOHHkUePjiAke/3aWbuUw5cVex\nPND67dkohbFOZh35RBJWUbIRcRaHzbSY7fawx9jilJQyGOHDpraqZHnMk+hXjY9X\nfZ1kmqbckIlSxbgER9FDO6VteJTCURmJCs8G+0mA+NhWu3Bl0hs6DjLDOYEiGKfr\nghlCvRLo6aUsLIbiAkkb8RUWtCP4j2O0qYNrwqnsvNYL2pW8eo4rSlwyk0PekdeN\n+V1SZ3zTqpICEVmXtp066arDUUfQVjocB5L1XMpV8QKBgQDmFQhGL6Os/UnqWfLI\neTpEz8A0HFo84NAQMg8femSEjiAU7lbmScntFubQHIQqGPBzXy4mb/p/dPgNrB7/\ngcQRl2yn+gFJa1PRcP4W0dXOkZdYO1tvf1ya8h+r95UuRNRYq20S4+p+nlzBt4lx\nF2NvnclZJCjmaizCcqPcHJ4M5QKBgQDJE4cEExzQAz9ZE0UfKvQKwbM+p2CJvhzQ\nMMqV1V9HmrvCwSMIXIfzxvdCGNXaqHC9Ne9l4cQVHU582voSoYOVvWI87h+NKxd2\n0y440wdLd5nLfhvd787PzL98DDJhK9aB9aW5LgihQ0HM2epduO1LxzjwvugPmoP+\n4rJxkeO/6QKBgQDSLEBErNvc9/r/Qm9Oxb5+gTBX6dZcahhl0vSRkqIjnBieRiHH\nd3wnQZZSYNoyAloTacykfAHdUCIPiz09tXI/h41P3EY0pQAKACd6/O9MJR6VEJOz\nxCn5uFdKJX12qJU48k9OxDe+tjaRFnFMh0rj+MSm0ysxX6fHcCVSuil+KQKBgQDC\nLqOC4do/YAN7SErGcLrA8JLjfMyT+Q7mV1gtHqQnCF0vFUl5t7JrT8hVAprz0Rse\n/sk0wLSWF3lGxkoeV/A1WXFXmjbKI8VDMWo/4jv3O4dAp4bN69rzfq2lZDn68VT0\nqH/kt3oKEmOnKwNUg1RWjAyHIjYFa5jxO4hMeTFSkQKBgGmZ0zmeJBzunLtsQOBV\nxJ6N/1anCMkcxlcd/wXFnAAdalnxjR2z882U1+Ru2lAs/2MREgYemrJwv1ZSMY/M\n3mT3mIMgBNJXIeP5hNsaCuyA+/qdsZC/EQlkzI4PHBij4QYo0tyXpkEsTH0YvJQ7\nrLxXmA29oOIOccXeu3lxOADj\n-----END PRIVATE KEY-----\n",
+  "client_email": "jack-frankowicz@pihome123.iam.gserviceaccount.com",
+  "client_id": "100683662826239923621",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/jack-frankowicz%40pihome123.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
