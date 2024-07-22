@@ -1,12 +1,12 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
-from openai import AsyncOpenAI
-import os
-import dotenv
 import logging
+import dotenv
 
 dotenv.load_dotenv()
+
+from openai_service import aclient, generate_openai_response
 
 app = FastAPI()
 
@@ -20,8 +20,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-aclient = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -42,25 +40,9 @@ async def openai_stream(request: Request):
     formatted_messages = [
         {"role": msg["sender"], "content": msg["text"]} for msg in messages
     ]
+    logger.info(f"Formatted messages: {formatted_messages}")
 
-    async def generate():
-        try:
-            response = await aclient.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=formatted_messages,
-                stream=True
-            )
-            async for chunk in response:
-                choice = chunk.choices[0].delta
-                content = choice.content if choice else None
-                if content:
-                    logger.info(f"Streaming content: {content}")
-                    yield content
-        except Exception as e:
-            logger.error(f"Error during OpenAI API call: {e}")
-            yield f"Error: {e}"
-
-    return StreamingResponse(generate(), media_type='text/plain')
+    return StreamingResponse(generate_openai_response(formatted_messages), media_type='text/plain')
 
 if __name__ == '__main__':
     import uvicorn
