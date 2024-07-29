@@ -28,10 +28,8 @@ aclient = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 # Global stop event
 stop_event = threading.Event()
 
-
 def apply_transformers(s: str, transformers: List[Callable[[str], str]]) -> str:
     return reduce(lambda c, transformer: transformer(c), transformers, s)
-
 
 async def stream_delimited_completion(
     messages: List[dict],
@@ -47,8 +45,7 @@ async def stream_delimited_completion(
     response = await client.chat.completions.create(
         model=model,
         messages=messages,
-        stream=True,
-        
+        stream=True
     )
     
     async for chunk in response:
@@ -79,7 +76,6 @@ async def stream_delimited_completion(
         yield working_string.strip()
 
     yield None  # Sentinel value to signal "no more coming"
-
 
 async def generate_openai_response(formatted_messages):
     full_content = ""
@@ -115,16 +111,15 @@ async def generate_openai_response(formatted_messages):
     phrase_queue.put(None)
     tts_thread.join()
     audio_player_thread.join()
-        
+    
     print(f"Full content: {full_content}")  # This can be used for logging purposes
-  # Print the last chunk after all chunks have been processed - token count
-    if last_chunk:
-     print(f"Last chunk data: {last_chunk}")
+
     
     # Signal the end of phrases
     phrase_queue.put(None)
     tts_thread.join()
     audio_player_thread.join()
+
 
 def text_to_speech_processor(phrase_queue: queue.Queue, audio_queue: queue.Queue):
     client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -132,7 +127,7 @@ def text_to_speech_processor(phrase_queue: queue.Queue, audio_queue: queue.Queue
     while not stop_event.is_set():
         text = phrase_queue.get()
         if text is None:
-            audio_queue.put(None)
+            audio_queue.put(None)  # Signal that no more audio data is coming
             return
 
         try:
@@ -143,7 +138,6 @@ def text_to_speech_processor(phrase_queue: queue.Queue, audio_queue: queue.Queue
                 input=text,
             )
 
-            # Assuming the response is a stream, we need to read the content
             audio_data = b''
             for chunk in response.iter_bytes():
                 audio_data += chunk
@@ -158,6 +152,7 @@ def text_to_speech_processor(phrase_queue: queue.Queue, audio_queue: queue.Queue
             audio_queue.put(None)
             return
 
+
 def audio_player(audio_queue: queue.Queue):
     p = pyaudio.PyAudio()
     player_stream = p.open(format=pyaudio.paInt16, channels=1, rate=24000, output=True)
@@ -166,7 +161,7 @@ def audio_player(audio_queue: queue.Queue):
         while not stop_event.is_set():
             audio_data = audio_queue.get()
             if audio_data is None:
-                break
+                break  # Exit if there's no more audio data
             player_stream.write(audio_data)
 
     except Exception as e:
@@ -176,6 +171,7 @@ def audio_player(audio_queue: queue.Queue):
         player_stream.stop_stream()
         player_stream.close()
         p.terminate()
+
 
 # Wait for Enter key to stop
 def wait_for_enter():

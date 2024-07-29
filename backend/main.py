@@ -37,11 +37,8 @@ async def openai_stream(request: Request):
     messages = data.get('messages', [])
 
     # Define the system message
-    system_message = {
-        "role": "system",
-        "content": "Insert sentiment in {} at end of every sentence: Default, Assistant, Chat, Customer service, Newscast, Angry, Cheerful, Sad, Excited, Friendly, Terrified, Shouting, Unfriendly, Whispering, Hopeful."
-    }
-
+    system_message = {"role": "system", "content": "You are a helpful assistant. Finish each sentence with sentiment in curly braces {}."}
+    
     # Insert the system message at the beginning of the formatted messages list
     formatted_messages = [
         {"role": msg["sender"], "content": msg["text"]} for msg in messages

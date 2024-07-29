@@ -47,8 +47,7 @@ async def stream_delimited_completion(
     response = await client.chat.completions.create(
         model=model,
         messages=messages,
-        stream=True,
-        
+        stream=True
     )
     
     async for chunk in response:
@@ -115,16 +114,6 @@ async def generate_openai_response(formatted_messages):
     phrase_queue.put(None)
     tts_thread.join()
     audio_player_thread.join()
-        
-    print(f"Full content: {full_content}")  # This can be used for logging purposes
-  # Print the last chunk after all chunks have been processed - token count
-    if last_chunk:
-     print(f"Last chunk data: {last_chunk}")
-    
-    # Signal the end of phrases
-    phrase_queue.put(None)
-    tts_thread.join()
-    audio_player_thread.join()
 
 def text_to_speech_processor(phrase_queue: queue.Queue, audio_queue: queue.Queue):
     client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -137,8 +126,8 @@ def text_to_speech_processor(phrase_queue: queue.Queue, audio_queue: queue.Queue
 
         try:
             response = client.audio.speech.create(
-                model=DEFAULT_TTS_MODEL,
-                voice=DEFAULT_VOICE,
+                model="tts-1",
+                voice="alloy",
                 response_format="pcm",
                 input=text,
             )

@@ -4,7 +4,7 @@
 export const generateAIResponse = async (messages, onUpdate) => {
   try {
     // Make a POST request to the backend API
-    const response = await fetch('http://localhost:5000/api/openai', {
+    const response = await fetch('http://localhost:8000/api/openai', {
       method: 'POST',  // Use the POST method
       headers: {
         'Content-Type': 'application/json'  // Set the content type to JSON
