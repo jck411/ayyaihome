@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { generateAIResponse } from './services/openaiService';
 import StatusBar from './components/StatusBar';
 import MessageList from './components/MessageList';
@@ -47,6 +47,38 @@ const ChatWebsite = () => {
       setStatus("Offline");
     }
   };
+
+  // Function to send stop signal
+  const sendStopSignal = async () => {
+    try {
+      const response = await fetch('http://localhost:8000/api/stop', {
+        method: 'POST',
+      });
+      if (!response.ok) {
+        console.error('Failed to send stop signal');
+      } else {
+        console.log('Stop signal sent successfully');
+      }
+    } catch (error) {
+      console.error('Error sending stop signal:', error);
+    }
+  };
+
+  // Listen for "Enter" key press to trigger stop signal
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === "Enter") {
+        sendStopSignal();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    // Cleanup event listener on component unmount
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
 
   return (
     <div className={`min-h-screen w-full ${darkMode ? 'bg-dark-bg text-dark-text' : 'bg-light-bg text-light-text'}`}>
