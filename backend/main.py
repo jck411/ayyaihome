@@ -13,6 +13,9 @@ import queue
 # Load environment variables from a .env file
 load_dotenv()
 
+# Global stop event
+stop_event = threading.Event()
+
 # Constants used throughout the application
 CONSTANTS = {
     "MINIMUM_PHRASE_LENGTH": 25,  # Minimum length for a phrase before it's processed for TTS
@@ -54,6 +57,7 @@ async def openai_stream(request: Request):
     Endpoint to handle OpenAI streaming requests.
     Receives a JSON payload, processes it, and returns a streamed response.
     """
+    stop_event.clear()  # Clear the stop event at the beginning of a new request
     data = await request.json()  # Parse JSON data from the request
     messages = [{"role": msg["sender"], "content": msg["text"]} for msg in data.get('messages', [])]  # Extract messages
     messages.insert(0, CONSTANTS["SYSTEM_PROMPT"])  # Add system prompt to the beginning of messages
@@ -78,6 +82,10 @@ async def stream_completion(messages: List[dict], phrase_queue: asyncio.Queue, m
 
         working_string = ""
         async for chunk in response:
+            if stop_event.is_set():
+                await phrase_queue.put(None)
+                break
+
             if chunk.choices and hasattr(chunk.choices[0].delta, 'content'):
                 content = chunk.choices[0].delta.content or ""
                 
@@ -115,7 +123,7 @@ async def text_to_speech_processor(phrase_queue: asyncio.Queue, audio_queue: que
     Streams audio chunks to the audio queue for playback.
     """
     try:
-        while True:
+        while not stop_event.is_set():
             phrase = await phrase_queue.get()  # Get the next phrase from the queue
             if phrase is None:
                 audio_queue.put(None)  # Signal the end of audio processing
@@ -130,6 +138,8 @@ async def text_to_speech_processor(phrase_queue: asyncio.Queue, audio_queue: que
                 response_format="pcm"
             ) as response:
                 async for audio_chunk in response.iter_bytes(CONSTANTS["TTS_CHUNK_SIZE"]):
+                    if stop_event.is_set():
+                        return
                     audio_queue.put(audio_chunk)  # Enqueue audio chunks for playback
             audio_queue.put(b'\x00' * 2400)  # Add a short pause between sentences
     except Exception as e:
@@ -148,9 +158,14 @@ def audio_player(audio_queue: queue.Queue):
             format=CONSTANTS["AUDIO_FORMAT"],
             channels=CONSTANTS["CHANNELS"],
             rate=CONSTANTS["RATE"],
-            output=True
+            output=True,
+            frames_per_buffer=2048  # Increase this if necessary
         )
-        while True:
+        
+        # Pre-fill buffer with silence to prevent initial underrun
+        stream.write(b'\x00' * 2048)  # Adjust size if necessary
+        
+        while not stop_event.is_set():
             audio_data = audio_queue.get()  # Get the next chunk of audio data
             if audio_data is None:
                 break  # Exit if there's no more audio data
@@ -176,6 +191,27 @@ async def process_streams(phrase_queue: asyncio.Queue, audio_queue: queue.Queue)
     start_audio_player(audio_queue)  # Start the audio player thread
     await tts_task  # Wait for TTS processing to complete
 
+@app.post("/api/stop")
+async def stop_tts():
+    """
+    Endpoint to stop the TTS and audio playback gracefully.
+    """
+    stop_event.set()
+    return {"status": "Stopping"}
+
+def wait_for_enter():
+    """
+    Waits for the Enter key press to stop the TTS operation.
+    """
+    while True:
+        input()
+        stop_event.set()
+        print("TTS stop triggered")
+
 if __name__ == '__main__':
+    # Start the wait_for_enter thread to listen for Enter key press to stop the TTS process
+    threading.Thread(target=wait_for_enter, daemon=True).start()
+    
+    # Run the FastAPI app using Uvicorn
     import uvicorn
-    uvicorn.run(app, host='0.0.0.0', port=8000)  # Run the FastAPI app
+    uvicorn.run(app, host='0.0.0.0', port=8000)
