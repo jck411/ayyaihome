@@ -1,3 +1,4 @@
+// App.js
 import React, { useState, useEffect } from 'react';
 import { generateAIResponse } from './services/openaiService';
 import StatusBar from './components/StatusBar';
@@ -80,6 +81,14 @@ const ChatWebsite = () => {
     };
   }, []);
 
+  // Function to scroll to a specific AI message
+  const scrollToAIMessage = (id) => {
+    const element = document.getElementById(`ai-message-${id}`);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  };
+
   return (
     <div className={`min-h-screen w-full ${darkMode ? 'bg-dark-bg text-dark-text' : 'bg-light-bg text-light-text'}`}>
       <div className="max-w-[1000px] mx-auto p-4 flex flex-col h-screen">
@@ -89,7 +98,11 @@ const ChatWebsite = () => {
         </div>
         <div className="flex flex-grow overflow-hidden">
           <div className="flex-1 flex flex-col overflow-hidden pr-2">
-            <MessageList messages={messages} sender="user" />
+            <MessageList 
+              messages={messages} 
+              sender="user" 
+              onMessageClick={scrollToAIMessage} 
+            />
           </div>
           <div className="flex-1 flex flex-col overflow-hidden pl-2">
             <MessageList messages={messages} sender="assistant" />

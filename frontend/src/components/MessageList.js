@@ -1,3 +1,4 @@
+// MessageList.js
 import React, { useEffect, useRef } from 'react';
 import CodeBlock from './CodeBlock';
 
@@ -29,7 +30,7 @@ const renderMessageContent = (content) => {
   return parts;
 };
 
-const MessageList = ({ messages, sender }) => {
+const MessageList = ({ messages, sender, onMessageClick }) => {
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
@@ -45,7 +46,13 @@ const MessageList = ({ messages, sender }) => {
       {messages
         .filter((message) => message.sender === sender)
         .map((message) => (
-          <div key={message.id} className={`mb-2 ${message.sender === 'user' ? 'text-light-text dark:text-dark-text' : 'text-green-500'}`}>
+          <div 
+            key={message.id} 
+            id={`${sender === 'assistant' ? `ai-message-${message.id}` : ''}`}
+            className={`mb-2 ${message.sender === 'user' ? 'text-light-text dark:text-dark-text' : 'text-green-500'}`}
+            onClick={sender === 'user' ? () => onMessageClick(message.id + 1) : null}
+            style={{ cursor: sender === 'user' ? 'pointer' : 'default' }}
+          >
             <span className="font-bold">{message.sender}: </span>
             {renderMessageContent(message.text)}
             <span className="block text-xs text-gray-500">{message.timestamp}</span>
