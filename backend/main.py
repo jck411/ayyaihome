@@ -29,7 +29,7 @@ CONSTANTS = {
     "TTS_SPEED": 1.0,  # Speed for TTS output
     "TEMPERATURE": 1.0,  # Temperature for text generation (controls creativity)
     "TOP_P": 1.0,  # Top-p sampling parameter for text generation
-    "DELIMITERS": [f"{d} " for d in (".", "?", "!")],  # Delimiters to determine phrase boundaries
+    "DELIMITERS": [".", "?", "!"],  # Delimiters to determine phrase boundaries
     "SYSTEM_PROMPT": {"role": "system", "content": "You are a helpful but witty and dry assistant"}  # System prompt for the OpenAI model
 }
 
@@ -77,45 +77,68 @@ async def stream_completion(messages: List[dict], phrase_queue: asyncio.Queue, m
             stream=True,
             temperature=CONSTANTS["TEMPERATURE"],
             top_p=CONSTANTS["TOP_P"],
-            stream_options={"include_usage": True},
         )
 
         working_string = ""
+        in_code_block = False  # State to track if we are inside a code block
         async for chunk in response:
             if stop_event.is_set():
                 await phrase_queue.put(None)
                 break
 
+            content = ""
             if chunk.choices and hasattr(chunk.choices[0].delta, 'content'):
                 content = chunk.choices[0].delta.content or ""
-                
-                if content:
-                    # Stream the pure text to the client
-                    yield content
-                    
-                    # Accumulate content for phrase generation
-                    working_string += content
-                    
-                    # Generate phrases only for audio queue
-                    while len(working_string) >= CONSTANTS["MINIMUM_PHRASE_LENGTH"]:
-                        delimiter_index = next(
-                            (working_string.find(d, CONSTANTS["MINIMUM_PHRASE_LENGTH"]) for d in CONSTANTS["DELIMITERS"] 
-                             if working_string.find(d, CONSTANTS["MINIMUM_PHRASE_LENGTH"]) != -1), -1)
-                        if delimiter_index == -1:
-                            break
-                        phrase, working_string = working_string[:delimiter_index + 1].strip(), working_string[delimiter_index + 1:]
-                        await phrase_queue.put(phrase)
-        
+
+            if content:
+                yield content  # Stream actual content to the frontend
+
+                working_string += content
+                while True:
+                    if in_code_block:
+                        # We're inside a code block, look for the closing delimiter
+                        code_block_end = working_string.find("```", 3)
+                        if code_block_end != -1:
+                            # Found the end of the code block
+                            working_string = working_string[code_block_end + 3:]  # Remove the code block from the buffer
+                            await phrase_queue.put("Code presented on screen")
+                            in_code_block = False
+                        else:
+                            break  # Wait for more content to complete the code block
+                    else:
+                        # Check for the start of a code block
+                        code_block_start = working_string.find("```")
+                        if code_block_start != -1:
+                            # Found the start of a code block
+                            phrase, working_string = working_string[:code_block_start], working_string[code_block_start:]
+                            if phrase.strip():
+                                await phrase_queue.put(phrase.strip())
+                            in_code_block = True
+                        else:
+                            # No code block, process regular text
+                            next_phrase_end = find_next_phrase_end(working_string)
+                            if next_phrase_end == -1:
+                                break
+
+                            phrase, working_string = working_string[:next_phrase_end + 1].strip(), working_string[next_phrase_end + 1:]
+                            await phrase_queue.put(phrase)
+
         # Handle any remaining text in working_string as the final phrase
-        if working_string.strip():
+        if working_string.strip() and not in_code_block:
             await phrase_queue.put(working_string.strip())
         await phrase_queue.put(None)
-    
+
     except Exception as e:
         print(f"Error in stream_completion: {e}")
         await phrase_queue.put(None)
         yield f"Error: {e}"
 
+def find_next_phrase_end(text: str) -> int:
+    # Find the next sentence delimiter after the minimum phrase length
+    sentence_delim_pos = [text.find(d, CONSTANTS["MINIMUM_PHRASE_LENGTH"]) for d in CONSTANTS["DELIMITERS"]]
+    sentence_delim_pos = [pos for pos in sentence_delim_pos if pos != -1]
+    
+    return min(sentence_delim_pos, default=-1)
 
 async def text_to_speech_processor(phrase_queue: asyncio.Queue, audio_queue: queue.Queue):
     """
@@ -129,7 +152,6 @@ async def text_to_speech_processor(phrase_queue: asyncio.Queue, audio_queue: que
                 audio_queue.put(None)  # Signal the end of audio processing
                 return
 
-            # Generate speech from the phrase using OpenAI's TTS
             async with aclient.audio.speech.with_streaming_response.create(
                 model=CONSTANTS["DEFAULT_TTS_MODEL"],
                 voice=CONSTANTS["DEFAULT_VOICE"],
@@ -153,7 +175,6 @@ def audio_player(audio_queue: queue.Queue):
     """
     stream = None
     try:
-        # Open an audio stream
         stream = p.open(
             format=CONSTANTS["AUDIO_FORMAT"],
             channels=CONSTANTS["CHANNELS"],
@@ -161,10 +182,9 @@ def audio_player(audio_queue: queue.Queue):
             output=True,
             frames_per_buffer=2048  # Increase this if necessary
         )
-        
-        # Pre-fill buffer with silence to prevent initial underrun
-        stream.write(b'\x00' * 2048)  # Adjust size if necessary
-        
+
+        stream.write(b'\x00' * 2048)  # Pre-fill buffer with silence
+
         while not stop_event.is_set():
             audio_data = audio_queue.get()  # Get the next chunk of audio data
             if audio_data is None:
@@ -209,9 +229,7 @@ def wait_for_enter():
         print("TTS stop triggered")
 
 if __name__ == '__main__':
-    # Start the wait_for_enter thread to listen for Enter key press to stop the TTS process
     threading.Thread(target=wait_for_enter, daemon=True).start()
-    
-    # Run the FastAPI app using Uvicorn
+
     import uvicorn
     uvicorn.run(app, host='0.0.0.0', port=8000)

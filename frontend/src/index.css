@@ -1,16 +1,14 @@
 :root {
   --contrast-orange: #CC5500; /* Burnt orange color */
   --dark-bg: #1D1F21;
-  --dark-text: #E5E6E7;
-  --light-bg: #2E3B4E;
-  --light-text: #F5F5F5;
+  --dark-text: hsl(210, 4%, 90%);
+  --light-bg: #F5F5F5; /* Updated to a lighter shade for light mode */
+  --light-text: #2E3B4E; /* Swapped with light-bg */
 }
-
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
 
 body {
   margin: 0;
@@ -19,12 +17,21 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background-color: var(--light-bg); /* Default light mode background */
+  color: var(--light-text); /* Default light mode text color */
+  transition: background-color 0.3s, color 0.3s; /* Smooth transition between modes */
+}
+
+body.dark-mode {
+  background-color: var(--dark-bg); /* Dark mode background */
+  color: var(--dark-text); /* Dark mode text color */
 }
 
 code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
 /* Custom scrollbar styles */
 ::-webkit-scrollbar {
   width: 8px;
@@ -35,7 +42,7 @@ code {
 }
 
 ::-webkit-scrollbar-thumb {
-  background-color: #ff4f00;
+  background-color: var(--contrast-orange);
   border-radius: 10px;
   border: 2px solid transparent;
 }

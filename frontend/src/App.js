@@ -87,7 +87,14 @@ const ChatWebsite = () => {
           <StatusBar status={status} />
           <ModeToggle darkMode={darkMode} toggleDarkMode={toggleDarkMode} />
         </div>
-        <MessageList messages={messages} />
+        <div className="flex flex-grow overflow-hidden">
+          <div className="flex-1 flex flex-col overflow-hidden pr-2">
+            <MessageList messages={messages} sender="user" />
+          </div>
+          <div className="flex-1 flex flex-col overflow-hidden pl-2">
+            <MessageList messages={messages} sender="assistant" />
+          </div>
+        </div>
         <MessageInput input={input} setInput={setInput} sendMessage={sendMessage} darkMode={darkMode} />
       </div>
     </div>
