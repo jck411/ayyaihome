@@ -1,4 +1,3 @@
-// App.js
 import React, { useState, useEffect } from 'react';
 import { generateAIResponse } from './services/openaiService';
 import StatusBar from './components/StatusBar';
@@ -11,6 +10,7 @@ const ChatWebsite = () => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [status, setStatus] = useState("Online");
+  const [leftWidth, setLeftWidth] = useState(50); // Initialize width percentage for the left pane
 
   const toggleDarkMode = () => setDarkMode(!darkMode);
 
@@ -89,6 +89,23 @@ const ChatWebsite = () => {
     }
   };
 
+  const handleDrag = (e) => {
+    const newLeftWidth = (e.clientX / window.innerWidth) * 100;
+    if (newLeftWidth > 20 && newLeftWidth < 80) { // Restrict resizing to between 20% and 80%
+      setLeftWidth(newLeftWidth);
+    }
+  };
+
+  const handleDragEnd = () => {
+    document.removeEventListener('mousemove', handleDrag);
+    document.removeEventListener('mouseup', handleDragEnd);
+  };
+
+  const handleMouseDown = () => {
+    document.addEventListener('mousemove', handleDrag);
+    document.addEventListener('mouseup', handleDragEnd);
+  };
+
   return (
     <div className={`min-h-screen w-full ${darkMode ? 'bg-dark-bg text-dark-text' : 'bg-light-bg text-light-text'}`}>
       <div className="max-w-[1000px] mx-auto p-4 flex flex-col h-screen">
@@ -97,14 +114,18 @@ const ChatWebsite = () => {
           <ModeToggle darkMode={darkMode} toggleDarkMode={toggleDarkMode} />
         </div>
         <div className="flex flex-grow overflow-hidden">
-          <div className="flex-1 flex flex-col overflow-hidden pr-2">
+          <div className="flex" style={{ width: `${leftWidth}%` }}>
             <MessageList 
               messages={messages} 
               sender="user" 
               onMessageClick={scrollToAIMessage} 
             />
           </div>
-          <div className="flex-1 flex flex-col overflow-hidden pl-2">
+          <div
+            className="mid-cursor"
+            onMouseDown={handleMouseDown}
+          />
+          <div className="flex flex-col overflow-hidden" style={{ width: `${100 - leftWidth}%` }}>
             <MessageList messages={messages} sender="assistant" />
           </div>
         </div>

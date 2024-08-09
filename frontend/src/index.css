@@ -46,3 +46,12 @@ code {
   border-radius: 10px;
   border: 2px solid transparent;
 }
+
+/* Separator styling */
+.mid-cursor {
+  width: 2px;
+  height: 90%; /* Adjust this value to make the separator shorter */
+  background-color: #CC5500;
+  cursor: col-resize; /* This ensures the correct cursor appears */
+  margin: auto 0; /* Centers the separator vertically */
+}
