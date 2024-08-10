@@ -1,4 +1,3 @@
-// MessageList.js
 import React, { useEffect, useRef } from 'react';
 import CodeBlock from './CodeBlock';
 
@@ -49,7 +48,7 @@ const MessageList = ({ messages, sender, onMessageClick }) => {
           <div 
             key={message.id} 
             id={`${sender === 'assistant' ? `ai-message-${message.id}` : ''}`}
-            className={`mb-2 ${message.sender === 'user' ? 'text-light-text dark:text-dark-text' : 'text-green-500'}`}
+            className={`mb-2 ${sender === 'assistant' ? 'ai-response' : 'user-response'}`}
             onClick={sender === 'user' ? () => onMessageClick(message.id + 1) : null}
             style={{ cursor: sender === 'user' ? 'pointer' : 'default' }}
           >

@@ -6,11 +6,11 @@ import MessageInput from './components/MessageInput';
 import ModeToggle from './components/ModeToggle';
 
 const ChatWebsite = () => {
-  const [darkMode, setDarkMode] = useState(false);
+  const [darkMode, setDarkMode] = useState(true);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [status, setStatus] = useState("Online");
-  const [leftWidth, setLeftWidth] = useState(50); // Initialize width percentage for the left pane
+  const [leftWidth, setLeftWidth] = useState(33); // Initialize width percentage for the left pane
 
   const toggleDarkMode = () => setDarkMode(!darkMode);
 
@@ -68,18 +68,20 @@ const ChatWebsite = () => {
   // Listen for "Enter" key press to trigger stop signal
   useEffect(() => {
     const handleKeyDown = (event) => {
-      if (event.key === "Enter") {
+      // Check if the Enter key is pressed and the target is not the textarea (input field)
+      if (event.key === "Enter" && event.target.tagName !== "TEXTAREA") {
+        event.preventDefault();
         sendStopSignal();
       }
     };
-
+  
     window.addEventListener("keydown", handleKeyDown);
-
-    // Cleanup event listener on component unmount
+  
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, []);
+  
 
   // Function to scroll to a specific AI message
   const scrollToAIMessage = (id) => {
@@ -108,7 +110,7 @@ const ChatWebsite = () => {
 
   return (
     <div className={`min-h-screen w-full ${darkMode ? 'bg-dark-bg text-dark-text' : 'bg-light-bg text-light-text'}`}>
-      <div className="max-w-[1000px] mx-auto p-4 flex flex-col h-screen">
+      <div className="max-w-[1200px] mx-auto p-4 flex flex-col h-screen">
         <div className="flex justify-between items-center mb-4">
           <StatusBar status={status} />
           <ModeToggle darkMode={darkMode} toggleDarkMode={toggleDarkMode} />
@@ -126,8 +128,8 @@ const ChatWebsite = () => {
             onMouseDown={handleMouseDown}
           />
           <div className="flex flex-col overflow-hidden" style={{ width: `${100 - leftWidth}%` }}>
-            <MessageList messages={messages} sender="assistant" />
-          </div>
+          <MessageList messages={messages} sender="assistant" />
+</div>
         </div>
         <MessageInput input={input} setInput={setInput} sendMessage={sendMessage} darkMode={darkMode} />
       </div>

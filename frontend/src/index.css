@@ -1,9 +1,10 @@
 :root {
   --contrast-orange: #CC5500; /* Burnt orange color */
-  --dark-bg: #1D1F21;
-  --dark-text: hsl(210, 4%, 90%);
-  --light-bg: #F5F5F5; /* Updated to a lighter shade for light mode */
-  --light-text: #2E3B4E; /* Swapped with light-bg */
+  --dark-bg: #1D1F21; /* Background color for dark mode */
+  --dark-text: #e0e0e0#d8d4cf; /* Light text color for dark mode */
+  --light-bg: #d8d8d8; /* Background color for light mode */
+  --light-text: #1f1e1e; /* Dark text color for light mode */
+
 }
 
 @tailwind base;
@@ -24,7 +25,7 @@ body {
 
 body.dark-mode {
   background-color: var(--dark-bg); /* Dark mode background */
-  color: var(--dark-text); /* Dark mode text color */
+  color: var(--dark-text); /* Light text for dark mode */
 }
 
 code {
@@ -35,6 +36,7 @@ code {
 /* Custom scrollbar styles */
 ::-webkit-scrollbar {
   width: 8px;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-track {
@@ -44,14 +46,93 @@ code {
 ::-webkit-scrollbar-thumb {
   background-color: var(--contrast-orange);
   border-radius: 10px;
-  border: 2px solid transparent;
 }
 
-/* Separator styling */
 .mid-cursor {
-  width: 2px;
-  height: 90%; /* Adjust this value to make the separator shorter */
-  background-color: #CC5500;
-  cursor: col-resize; /* This ensures the correct cursor appears */
-  margin: auto 0; /* Centers the separator vertically */
+  width: 1px; /* Thinner cursor */
+  height: 90%; /* Shorter vertical height */
+  background-color: var(--contrast-orange); /* Orange color */
+  position: relative;
+  cursor: col-resize;
+  top: 5px; /* Moves the entire cursor line down */
+}
+
+.mid-cursor::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 8px; /* Diameter of the ball */
+  height: 8px;
+  background-color: var(--contrast-orange);
+  border-radius: 50%;
+}
+
+/* Container for the code block */
+.code-block-container {
+  background-color: #202123; /* Dark background color */
+  border: 1px solid #333; /* Thin border */
+  border-radius: 4px; /* Slightly rounded corners */
+  padding: 16px;
+  position: relative;
+  font-family: "Courier New", Courier, monospace; /* Monospaced font */
+  color: #f8f8f2; /* Light text color */
+}
+
+/* Header that displays the code language */
+.code-block-header {
+  font-size: 12px;
+  color: #bbb; /* Light grey to differentiate from code text */
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+/* Syntax highlighting colors (via highlight.js theme) */
+code.hljs {
+  color: #f8f8f2; /* Default code text color */
+}
+
+code.hljs .hljs-keyword {
+  color: #c678dd; /* Keywords */
+}
+
+code.hljs .hljs-string {
+  color: #98c379; /* Strings */
+}
+
+code.hljs .hljs-comment {
+  color: #5c6370; /* Comments */
+}
+
+/* Copy button styling */
+.copy-code-button {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background-color: #333; /* Dark background for button */
+  color: #fff; /* White text */
+  border: none;
+  padding: 4px 8px;
+  font-size: 12px;
+  border-radius: 4px; /* Rounded corners */
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.copy-code-button:hover {
+  background-color: #555; /* Lighter background on hover */
+}
+
+/* Message Text Styling for Both AI and User */
+.message-text {
+  color: var(--message-text-light); /* Default to light mode text color */
+}
+
+body.dark-mode .message-text {
+  color: var(--message-text-dark) !important; /* Burnt orange for dark mode */
+}
+
+/* User and Assistant Label Styling */
+.font-bold {
+  color: var(--contrast-orange) !important; /* Burnt orange for user and assistant labels */
 }

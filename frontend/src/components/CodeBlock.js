@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { CopyToClipboard } from 'react-copy-to-clipboard';
 import hljs from 'highlight.js';
-import 'highlight.js/styles/github-dark.css'; // Using a dark theme
+import 'highlight.js/styles/atom-one-dark.css'; // A popular dark theme for syntax highlighting
 
 const CodeBlock = ({ code, language }) => {
   const [isCopied, setIsCopied] = useState(false);
@@ -18,18 +18,20 @@ const CodeBlock = ({ code, language }) => {
   };
 
   return (
-    <div className="relative bg-dark-bg text-dark-text p-4 rounded-lg">
+    <div className="code-block-container">
+      <div className="code-block-header">
+        <span>{language.toUpperCase()}</span> {/* Display the language type */}
+      </div>
       <pre>
         <code className={`hljs ${language}`}>
           {code}
         </code>
       </pre>
       <CopyToClipboard text={code} onCopy={handleCopy}>
-        <button className="absolute top-2 right-2 bg-gray-700 p-1 rounded text-xs hover:bg-gray-600">
+        <button className="copy-code-button">
           {isCopied ? 'Copied' : 'Copy'}
         </button>
       </CopyToClipboard>
-      <div className="text-xs text-gray-400 absolute bottom-2 right-2">{language}</div>
     </div>
   );
 };
