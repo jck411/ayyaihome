@@ -57,7 +57,13 @@ async def openai_stream(request: Request):
     Endpoint to handle OpenAI streaming requests.
     Receives a JSON payload, processes it, and returns a streamed response.
     """
-    stop_event.clear()  # Clear the stop event at the beginning of a new request
+    stop_event.set()  # Trigger the stop event to halt any ongoing processes
+
+    # Ensure ongoing processes are fully stopped
+    await asyncio.sleep(0.1)  # Brief delay to ensure the stop signal is fully processed
+
+    stop_event.clear()  # Clear the stop event for the new request
+
     data = await request.json()  # Parse JSON data from the request
     messages = [{"role": msg["sender"], "content": msg["text"]} for msg in data.get('messages', [])]  # Extract messages
     messages.insert(0, CONSTANTS["SYSTEM_PROMPT"])  # Add system prompt to the beginning of messages

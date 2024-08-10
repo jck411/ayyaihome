@@ -27,6 +27,10 @@ const ChatWebsite = () => {
     console.log("Sending message:", userMessage);
 
     try {
+      // First, send the stop signal
+      await sendStopSignal();
+
+      // Then, generate the AI response
       await generateAIResponse([...messages, userMessage], (content) => {
         console.log("Received content:", content);
         setMessages((prevMessages) => {
@@ -82,7 +86,6 @@ const ChatWebsite = () => {
     };
   }, []);
   
-
   // Function to scroll to a specific AI message
   const scrollToAIMessage = (id) => {
     const element = document.getElementById(`ai-message-${id}`);
@@ -128,8 +131,8 @@ const ChatWebsite = () => {
             onMouseDown={handleMouseDown}
           />
           <div className="flex flex-col overflow-hidden" style={{ width: `${100 - leftWidth}%` }}>
-          <MessageList messages={messages} sender="assistant" />
-</div>
+            <MessageList messages={messages} sender="assistant" />
+          </div>
         </div>
         <MessageInput input={input} setInput={setInput} sendMessage={sendMessage} darkMode={darkMode} />
       </div>
