@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { generateAIResponse } from './services/openaiService';
+import { generateAnthropicResponse } from './services/anthropicService';
+import Sidebar from './components/Sidebar';
 import StatusBar from './components/StatusBar';
 import MessageList from './components/MessageList';
 import MessageInput from './components/MessageInput';
@@ -10,9 +12,13 @@ const ChatWebsite = () => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [status, setStatus] = useState("Online");
-  const [leftWidth, setLeftWidth] = useState(33); // Initialize width percentage for the left pane
+  const [selectedAPI, setSelectedAPI] = useState('anthropic');
+  const [isSidebarOpen, setSidebarOpen] = useState(false);
+  const [leftWidth, setLeftWidth] = useState(33);
 
   const toggleDarkMode = () => setDarkMode(!darkMode);
+
+  const toggleSidebar = () => setSidebarOpen(!isSidebarOpen);
 
   const sendMessage = async (e) => {
     e.preventDefault();
@@ -24,28 +30,18 @@ const ChatWebsite = () => {
     setInput("");
     setStatus("Listening...");
 
-    console.log("Sending message:", userMessage);
-
     try {
-      // First, send the stop signal
-      await sendStopSignal();
-
-      // Then, generate the AI response
-      await generateAIResponse([...messages, userMessage], (content) => {
-        console.log("Received content:", content);
-        setMessages((prevMessages) => {
-          const updatedMessages = [...prevMessages];
-          const existingAssistantMessage = updatedMessages.find(msg => msg.sender === "assistant" && msg.id === userMessage.id + 1);
-
-          if (existingAssistantMessage) {
-            existingAssistantMessage.text = content;
-          } else {
-            updatedMessages.push({ id: userMessage.id + 1, text: content, sender: "assistant", timestamp: new Date().toLocaleTimeString() });
-          }
-
-          return updatedMessages;
+      if (selectedAPI === 'openai') {
+        await sendStopSignal();
+        await generateAIResponse([...messages, userMessage], (content) => {
+          updateMessages(content, userMessage.id);
         });
-      });
+      } else if (selectedAPI === 'anthropic') {
+        await generateAnthropicResponse([...messages, userMessage], (content) => {
+          updateMessages(content, userMessage.id);
+        });
+      }
+
       setStatus("Online");
     } catch (error) {
       console.error('Error:', error);
@@ -53,7 +49,28 @@ const ChatWebsite = () => {
     }
   };
 
-  // Function to send stop signal
+  const updateMessages = (content, messageId) => {
+    setMessages((prevMessages) => {
+      const updatedMessages = [...prevMessages];
+      const existingAssistantMessage = updatedMessages.find(
+        (msg) => msg.sender === "assistant" && msg.id === messageId + 1
+      );
+
+      if (existingAssistantMessage) {
+        existingAssistantMessage.text = content;
+      } else {
+        updatedMessages.push({
+          id: messageId + 1,
+          text: content,
+          sender: "assistant",
+          timestamp: new Date().toLocaleTimeString(),
+        });
+      }
+
+      return updatedMessages;
+    });
+  };
+
   const sendStopSignal = async () => {
     try {
       const response = await fetch('http://localhost:8000/api/stop', {
@@ -69,24 +86,23 @@ const ChatWebsite = () => {
     }
   };
 
-  // Listen for "Enter" key press to trigger stop signal
   useEffect(() => {
     const handleKeyDown = (event) => {
-      // Check if the Enter key is pressed and the target is not the textarea (input field)
       if (event.key === "Enter" && event.target.tagName !== "TEXTAREA") {
         event.preventDefault();
-        sendStopSignal();
+        if (selectedAPI === 'openai') {
+          sendStopSignal();
+        }
       }
     };
-  
+
     window.addEventListener("keydown", handleKeyDown);
-  
+
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, []);
-  
-  // Function to scroll to a specific AI message
+  }, [selectedAPI]);
+
   const scrollToAIMessage = (id) => {
     const element = document.getElementById(`ai-message-${id}`);
     if (element) {
@@ -96,7 +112,7 @@ const ChatWebsite = () => {
 
   const handleDrag = (e) => {
     const newLeftWidth = (e.clientX / window.innerWidth) * 100;
-    if (newLeftWidth > 20 && newLeftWidth < 80) { // Restrict resizing to between 20% and 80%
+    if (newLeftWidth > 20 && newLeftWidth < 80) {
       setLeftWidth(newLeftWidth);
     }
   };
@@ -113,17 +129,23 @@ const ChatWebsite = () => {
 
   return (
     <div className={`min-h-screen w-full ${darkMode ? 'bg-dark-bg text-dark-text' : 'bg-light-bg text-light-text'}`}>
+      <Sidebar
+        isOpen={isSidebarOpen}
+        toggleSidebar={toggleSidebar}
+        selectedAPI={selectedAPI}
+        setSelectedAPI={setSelectedAPI}
+      />
       <div className="max-w-[1200px] mx-auto p-4 flex flex-col h-screen">
         <div className="flex justify-between items-center mb-4">
-          <StatusBar status={status} />
+          <StatusBar status={status} toggleSidebar={toggleSidebar} />
           <ModeToggle darkMode={darkMode} toggleDarkMode={toggleDarkMode} />
         </div>
         <div className="flex flex-grow overflow-hidden">
           <div className="flex" style={{ width: `${leftWidth}%` }}>
-            <MessageList 
-              messages={messages} 
-              sender="user" 
-              onMessageClick={scrollToAIMessage} 
+            <MessageList
+              messages={messages}
+              sender="user"
+              onMessageClick={scrollToAIMessage}
             />
           </div>
           <div

@@ -30,7 +30,7 @@ CONSTANTS = {
     "TEMPERATURE": 1.0,  # Temperature for text generation (controls creativity)
     "TOP_P": 1.0,  # Top-p sampling parameter for text generation
     "DELIMITERS": [".", "?", "!"],  # Delimiters to determine phrase boundaries
-    "SYSTEM_PROMPT": {"role": "system", "content": "You are a helpful but witty and dry assistant"}  # System prompt for the OpenAI model
+    "SYSTEM_PROMPT": {"role": "system", "content": "You are a dry but witty AI assistant"}  # System prompt for the OpenAI model
 }
 
 # Initialize the OpenAI API client
