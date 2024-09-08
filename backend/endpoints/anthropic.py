@@ -2,9 +2,9 @@ from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 import asyncio
 import queue
-from init import stop_event, anthropic_client
-from services.tts_service_anthropic import process_streams
-from services.audio_player import find_next_phrase_end
+from init import stop_event, CONSTANTS, anthropic_client
+from services.tts_service_openai import process_streams # Import process_streams for TTS handling
+from services.audio_player import find_next_phrase_end  # Import find_next_phrase_end for phrase detection
 
 # Define the router for Anthropic-related endpoints
 anthropic_router = APIRouter()
@@ -13,38 +13,28 @@ anthropic_router = APIRouter()
 async def anthropic_chat(request: Request):
     """
     Handles POST requests to the "/api/anthropic" endpoint.
-    Processes user input, sends it to the Anthropic API for response generation, and streams the output back.
+    Processes user input, sends it to the Anthropic API for response generation,
+    streams the text back, and uses OpenAI TTS to convert the text to speech.
     """
-    # Handle stop event
-    stop_event.set()
+    stop_event.set()  # Signal to stop ongoing tasks
     await asyncio.sleep(0.1)
     stop_event.clear()
-    
+
     try:
         data = await request.json()
         messages = [{"role": msg["role"], "content": msg["content"]} for msg in data.get('messages', [])]
 
         if not messages:
             return {"error": "Prompt is required."}
-        
-        # Fix alternating roles between user and assistant
-        last_role = None
-        fixed_messages = []
-        for msg in messages:
-            if msg["role"] == last_role:
-                # If the role repeats, fix it (assume "assistant" if "user" repeats)
-                fixed_messages.append({"role": "assistant" if last_role == "user" else "user", "content": ""})
-            fixed_messages.append(msg)
-            last_role = msg["role"]
 
         # Initialize queues for TTS processing
         phrase_queue, audio_queue = asyncio.Queue(), queue.Queue()
 
-        # Start TTS processing in the background
+        # Start TTS processing in the background (OpenAI TTS)
         asyncio.create_task(process_streams(phrase_queue, audio_queue))
 
         # Return a streaming response from the Anthropic API
-        return StreamingResponse(stream_completion(fixed_messages, phrase_queue), media_type='text/plain')
+        return StreamingResponse(stream_completion(messages, phrase_queue), media_type='text/plain')
 
     except Exception as e:
         return {"error": f"Unexpected error: {str(e)}"}
@@ -53,8 +43,7 @@ async def anthropic_chat(request: Request):
 async def stream_completion(messages: list, phrase_queue: asyncio.Queue, model: str = "claude-3-5-sonnet-20240620"):
     """
     Streams the response from the Anthropic API.
-    Processes each chunk of the response, adds it to the phrase queue for text-to-speech conversion, 
-    and streams the content back to the client.
+    Sends each chunk of the response to the phrase queue for OpenAI TTS processing.
     """
     try:
         async with anthropic_client.messages.stream(
@@ -63,20 +52,19 @@ async def stream_completion(messages: list, phrase_queue: asyncio.Queue, model: 
             max_tokens=1024,
             temperature=0.7
         ) as stream:
-            
             working_string = ""
             in_code_block = False
 
             async for chunk in stream.text_stream:
-                if stop_event.is_set():
+                if stop_event.is_set():  # Stop streaming if the event is triggered
                     await phrase_queue.put(None)
-                    break
+                    return
 
                 content = chunk or ""
 
                 if content:
-                    yield content
-                    working_string += content
+                    yield content  # Stream content back to client
+                    working_string += content  # Accumulate the content
 
                     while True:
                         code_block_start = working_string.find("```")
@@ -105,9 +93,10 @@ async def stream_completion(messages: list, phrase_queue: asyncio.Queue, model: 
             if working_string.strip() and not in_code_block:
                 await phrase_queue.put(working_string.strip())
 
-            await phrase_queue.put(None)
+            await phrase_queue.put(None)  # Signal the end of the stream to the TTS processor
 
     except Exception as e:
         print(f"Error in stream_completion: {e}")
         await phrase_queue.put(None)
         yield f"Error: {e}"
+

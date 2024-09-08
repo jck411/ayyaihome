@@ -3,7 +3,7 @@ from fastapi.responses import StreamingResponse
 import asyncio
 import queue
 from init import stop_event, CONSTANTS, aclient
-from services.tts_service import process_streams  # Import process_streams from tts_service
+from services.tts_service_openai import process_streams # Import process_streams from tts_service
 # Correct the import based on where find_next_phrase_end is located
 from services.audio_player import find_next_phrase_end  # Adjust this if necessary
 
