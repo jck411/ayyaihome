@@ -16,7 +16,6 @@ const ChatWebsite = () => {
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [leftWidth, setLeftWidth] = useState(33);
 
-  // Add or remove dark-mode class on body when darkMode changes
   useEffect(() => {
     if (darkMode) {
       document.body.classList.add('dark-mode');
@@ -139,36 +138,43 @@ const ChatWebsite = () => {
   };
 
   return (
-    <div className={`min-h-screen w-full ${darkMode ? 'bg-dark-bg text-dark-text' : 'bg-light-bg text-light-text'}`}>
-      <Sidebar
-        isOpen={isSidebarOpen}
-        toggleSidebar={toggleSidebar}
-        selectedAPI={selectedAPI}
-        setSelectedAPI={setSelectedAPI}
-        darkMode={darkMode} // Pass darkMode to Sidebar
-      />
-      <div className="max-w-[1200px] mx-auto p-4 flex flex-col h-screen">
-        <div className="flex justify-between items-center mb-4">
-          <StatusBar status={status} toggleSidebar={toggleSidebar} />
-          <ModeToggle darkMode={darkMode} toggleDarkMode={toggleDarkMode} />
-        </div>
-        <div className="flex flex-grow overflow-hidden">
-          <div className="flex" style={{ width: `${leftWidth}%` }}>
-            <MessageList
-              messages={messages}
-              sender="user"
-              onMessageClick={scrollToAIMessage}
+    <div className={`min-h-screen w-full flex ${darkMode ? 'bg-dark-bg text-dark-text' : 'bg-light-bg text-light-text'}`}>
+      {/* Sidebar */}
+      <div className={`fixed top-0 left-0 h-full z-50 transition-transform duration-300 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <Sidebar
+          isOpen={isSidebarOpen}
+          toggleSidebar={toggleSidebar}
+          selectedAPI={selectedAPI}
+          setSelectedAPI={setSelectedAPI}
+          darkMode={darkMode}
+        />
+      </div>
+
+      {/* Main content */}
+      <div className={`flex-grow transition-all duration-300 ${isSidebarOpen ? 'ml-32' : 'ml-0'}`}>
+        <div className="max-w-[1200px] mx-auto p-4 flex flex-col h-screen">
+          <div className="flex justify-between items-center mb-4">
+            <StatusBar status={status} toggleSidebar={toggleSidebar} />
+            <ModeToggle darkMode={darkMode} toggleDarkMode={toggleDarkMode} />
+          </div>
+          <div className="flex flex-grow overflow-hidden">
+            <div className="flex" style={{ width: `${leftWidth}%` }}>
+              <MessageList
+                messages={messages}
+                sender="user"
+                onMessageClick={scrollToAIMessage}
+              />
+            </div>
+            <div
+              className="mid-cursor"
+              onMouseDown={handleMouseDown}
             />
+            <div className="flex flex-col overflow-hidden" style={{ width: `${100 - leftWidth}%` }}>
+              <MessageList messages={messages} sender="assistant" />
+            </div>
           </div>
-          <div
-            className="mid-cursor"
-            onMouseDown={handleMouseDown}
-          />
-          <div className="flex flex-col overflow-hidden" style={{ width: `${100 - leftWidth}%` }}>
-            <MessageList messages={messages} sender="assistant" />
-          </div>
+          <MessageInput input={input} setInput={setInput} sendMessage={sendMessage} darkMode={darkMode} />
         </div>
-        <MessageInput input={input} setInput={setInput} sendMessage={sendMessage} darkMode={darkMode} />
       </div>
     </div>
   );

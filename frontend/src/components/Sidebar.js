@@ -14,8 +14,9 @@ const Sidebar = ({ isOpen, toggleSidebar, selectedAPI, setSelectedAPI, darkMode 
 
       {/* The sidebar itself */}
       <div
-        className={`fixed top-0 left-0 h-full transition-transform transform w-64 z-40 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
+        className={`fixed top-0 left-0 h-full transition-transform transform z-40 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
         style={{
+          width: 'auto', // Auto width based on content
           backgroundColor: darkMode ? 'var(--dark-bg)' : 'var(--light-bg)',  // Apply correct background color
           color: 'var(--contrast-orange)',  // Ensure text is also orange
         }}
