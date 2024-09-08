@@ -31,8 +31,10 @@ const ChatWebsite = () => {
     setStatus("Listening...");
 
     try {
+      console.log('Sending stop signal globally before all requests');  // Log before stop signal for both APIs
+      await sendStopSignal();  // Send stop signal globally for both OpenAI and Anthropic
+
       if (selectedAPI === 'openai') {
-        await sendStopSignal();
         await generateAIResponse([...messages, userMessage], (content) => {
           updateMessages(content, userMessage.id);
         });
@@ -73,6 +75,7 @@ const ChatWebsite = () => {
 
   const sendStopSignal = async () => {
     try {
+      console.log('Sending stop signal...');  // Log when stop signal is sent
       const response = await fetch('http://localhost:8000/api/stop', {
         method: 'POST',
       });
@@ -90,9 +93,8 @@ const ChatWebsite = () => {
     const handleKeyDown = (event) => {
       if (event.key === "Enter" && event.target.tagName !== "TEXTAREA") {
         event.preventDefault();
-        if (selectedAPI === 'openai') {
-          sendStopSignal();
-        }
+        console.log('Sending stop signal via Enter key');  // Log Enter key trigger
+        sendStopSignal();
       }
     };
 
