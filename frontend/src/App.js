@@ -16,6 +16,15 @@ const ChatWebsite = () => {
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [leftWidth, setLeftWidth] = useState(33);
 
+  // Add or remove dark-mode class on body when darkMode changes
+  useEffect(() => {
+    if (darkMode) {
+      document.body.classList.add('dark-mode');
+    } else {
+      document.body.classList.remove('dark-mode');
+    }
+  }, [darkMode]);
+
   const toggleDarkMode = () => setDarkMode(!darkMode);
 
   const toggleSidebar = () => setSidebarOpen(!isSidebarOpen);
@@ -31,8 +40,8 @@ const ChatWebsite = () => {
     setStatus("Listening...");
 
     try {
-      console.log('Sending stop signal globally before all requests');  // Log before stop signal for both APIs
-      await sendStopSignal();  // Send stop signal globally for both OpenAI and Anthropic
+      console.log('Sending stop signal globally before all requests');
+      await sendStopSignal();
 
       if (selectedAPI === 'openai') {
         await generateAIResponse([...messages, userMessage], (content) => {
@@ -75,7 +84,7 @@ const ChatWebsite = () => {
 
   const sendStopSignal = async () => {
     try {
-      console.log('Sending stop signal...');  // Log when stop signal is sent
+      console.log('Sending stop signal...');
       const response = await fetch('http://localhost:8000/api/stop', {
         method: 'POST',
       });
@@ -93,7 +102,7 @@ const ChatWebsite = () => {
     const handleKeyDown = (event) => {
       if (event.key === "Enter" && event.target.tagName !== "TEXTAREA") {
         event.preventDefault();
-        console.log('Sending stop signal via Enter key');  // Log Enter key trigger
+        console.log('Sending stop signal via Enter key');
         sendStopSignal();
       }
     };
@@ -136,6 +145,7 @@ const ChatWebsite = () => {
         toggleSidebar={toggleSidebar}
         selectedAPI={selectedAPI}
         setSelectedAPI={setSelectedAPI}
+        darkMode={darkMode} // Pass darkMode to Sidebar
       />
       <div className="max-w-[1200px] mx-auto p-4 flex flex-col h-screen">
         <div className="flex justify-between items-center mb-4">

@@ -4,7 +4,8 @@
   --dark-text: #d8d4cf; /* Light text color for dark mode */
   --light-bg: #d8d8d8; /* Background color for light mode */
   --light-text: #1f1e1e; /* Dark text color for light mode */
-
+  --message-text-light: #1f1e1e; /* Default text color for light mode */
+  --message-text-dark: #CC5500; /* Burnt orange for dark mode */
 }
 
 @tailwind base;
@@ -23,14 +24,10 @@ body {
   transition: background-color 0.3s, color 0.3s; /* Smooth transition between modes */
 }
 
+/* Dark mode styling */
 body.dark-mode {
   background-color: var(--dark-bg); /* Dark mode background */
   color: var(--dark-text); /* Light text for dark mode */
-}
-
-code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
 }
 
 /* Custom scrollbar styles */
@@ -48,6 +45,7 @@ code {
   border-radius: 10px;
 }
 
+/* Mid-cursor for dragging */
 .mid-cursor {
   width: 1px; /* Thinner cursor */
   height: 90%; /* Shorter vertical height */
@@ -68,7 +66,7 @@ code {
   border-radius: 50%;
 }
 
-/* Container for the code block */
+/* Code block styling */
 .code-block-container {
   background-color: #202123; /* Dark background color */
   border: 1px solid #333; /* Thin border */
@@ -79,7 +77,6 @@ code {
   color: #f8f8f2; /* Light text color */
 }
 
-/* Header that displays the code language */
 .code-block-header {
   font-size: 12px;
   color: #bbb; /* Light grey to differentiate from code text */
