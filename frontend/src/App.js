@@ -1,18 +1,24 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { generateAIResponse } from './services/openaiService';
-import { generateAnthropicResponse } from './services/anthropicService';
+import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import StatusBar from './components/StatusBar';
 import MessageList from './components/MessageList';
 import MessageInput from './components/MessageInput';
 import ModeToggle from './components/ModeToggle';
+import { useMessageLogic } from './MessageLogic';  // Import message logic
 
 const ChatWebsite = () => {
+  const {
+    messages,
+    input,
+    setInput,
+    status,
+    sendMessage,
+    selectedAPI,
+    setSelectedAPI,
+    sendStopSignal,  // Ensure sendStopSignal is destructured here
+  } = useMessageLogic();  // Use the custom hook for messaging logic
+
   const [darkMode, setDarkMode] = useState(true);
-  const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState("");
-  const [status, setStatus] = useState("Online");
-  const [selectedAPI, setSelectedAPI] = useState('anthropic');
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [leftWidth, setLeftWidth] = useState(33);
 
@@ -24,86 +30,12 @@ const ChatWebsite = () => {
     }
   }, [darkMode]);
 
-  const toggleDarkMode = () => setDarkMode(!darkMode);
-
-  const toggleSidebar = () => setSidebarOpen(!isSidebarOpen);
-
-  // Memoize sendStopSignal with useCallback to prevent redefinition on every render
-  const sendStopSignal = useCallback(async () => {
-    try {
-      console.log('Sending stop signal...');
-      const response = await fetch('http://localhost:8000/api/stop', {
-        method: 'POST',
-      });
-      if (!response.ok) {
-        console.error('Failed to send stop signal');
-      } else {
-        console.log('Stop signal sent successfully');
-      }
-    } catch (error) {
-      console.error('Error sending stop signal:', error);
-    }
-  }, []);  // No dependencies
-
-  const sendMessage = async (e) => {
-    e.preventDefault();
-    if (!input.trim()) return;
-
-    const timestamp = new Date().toLocaleTimeString();
-    const userMessage = { id: messages.length + 1, text: input, sender: "user", timestamp };
-    setMessages([...messages, userMessage]);
-    setInput("");
-    setStatus("Listening...");
-
-    try {
-      console.log('Sending stop signal globally before all requests');
-      await sendStopSignal();
-
-      if (selectedAPI === 'openai') {
-        await generateAIResponse([...messages, userMessage], (content) => {
-          updateMessages(content, userMessage.id);
-        });
-      } else if (selectedAPI === 'anthropic') {
-        await generateAnthropicResponse([...messages, userMessage], (content) => {
-          updateMessages(content, userMessage.id);
-        });
-      }
-
-      setStatus("Online");
-    } catch (error) {
-      console.error('Error:', error);
-      setStatus("Offline");
-    }
-  };
-
-  const updateMessages = (content, messageId) => {
-    setMessages((prevMessages) => {
-      const updatedMessages = [...prevMessages];
-      const existingAssistantMessage = updatedMessages.find(
-        (msg) => msg.sender === "assistant" && msg.id === messageId + 1
-      );
-
-      if (existingAssistantMessage) {
-        existingAssistantMessage.text = content;
-      } else {
-        updatedMessages.push({
-          id: messageId + 1,
-          text: content,
-          sender: "assistant",
-          timestamp: new Date().toLocaleTimeString(),
-        });
-      }
-
-      return updatedMessages;
-    });
-  };
-
   useEffect(() => {
     const handleKeyDown = (event) => {
       if (event.key === "Enter" && event.target.tagName !== "TEXTAREA") {
         event.preventDefault();
+        sendStopSignal();  // Call sendStopSignal when Enter is pressed
         console.log('Sending stop signal via Enter key');
-        sendStopSignal();
       }
     };
 
@@ -112,14 +44,10 @@ const ChatWebsite = () => {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [sendStopSignal, selectedAPI]);  // Dependencies updated
+  }, [sendStopSignal, selectedAPI]);  // Ensure dependencies are updated
 
-  const scrollToAIMessage = (id) => {
-    const element = document.getElementById(`ai-message-${id}`);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-  };
+  const toggleDarkMode = () => setDarkMode(!darkMode);
+  const toggleSidebar = () => setSidebarOpen(!isSidebarOpen);
 
   const handleDrag = (e) => {
     const newLeftWidth = (e.clientX / window.innerWidth) * 100;
@@ -138,9 +66,15 @@ const ChatWebsite = () => {
     document.addEventListener('mouseup', handleDragEnd);
   };
 
+  const scrollToAIMessage = (id) => {
+    const element = document.getElementById(`ai-message-${id}`);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  };
+
   return (
     <div className={`min-h-screen w-full flex ${darkMode ? 'bg-dark-bg text-dark-text' : 'bg-light-bg text-light-text'}`}>
-      {/* Sidebar */}
       <div className={`fixed top-0 left-0 h-full z-50 transition-transform duration-300 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <Sidebar
           isOpen={isSidebarOpen}
@@ -151,7 +85,6 @@ const ChatWebsite = () => {
         />
       </div>
 
-      {/* Main content */}
       <div className={`flex-grow transition-all duration-300 ${isSidebarOpen ? 'ml-32' : 'ml-0'}`}>
         <div className="max-w-[1200px] mx-auto p-4 flex flex-col h-screen">
           <div className="flex justify-between items-center mb-4">
