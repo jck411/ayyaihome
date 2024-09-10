@@ -2,7 +2,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 import asyncio
 import queue
-from init import stop_event, ANTHROPIC_CONSTANTS, anthropic_client
+from init import stop_event, ANTHROPIC_CONSTANTS, anthropic_client  # Correct imports
 from services.tts_service import process_streams  # Use shared TTS service
 from services.audio_player import find_next_phrase_end
 
@@ -21,6 +21,7 @@ async def anthropic_chat(request: Request):
         if not messages:
             return {"error": "Prompt is required."}
 
+        # Initialize queues for TTS processing
         phrase_queue, audio_queue = asyncio.Queue(), queue.Queue()
 
         # Use the OpenAI TTS service, but pass ANTHROPIC_CONSTANTS for voice settings
@@ -53,13 +54,30 @@ async def stream_completion(messages: list, phrase_queue: asyncio.Queue):
                     working_string += content
 
                     while True:
-                        next_phrase_end = find_next_phrase_end(working_string)
-                        if next_phrase_end == -1:
-                            break
-                        phrase, working_string = working_string[:next_phrase_end + 1].strip(), working_string[next_phrase_end + 1:]
-                        await phrase_queue.put(phrase)
+                        code_block_start = working_string.find("```")
 
-            if working_string.strip():
+                        if in_code_block:
+                            code_block_end = working_string.find("```", 3)
+                            if code_block_end != -1:
+                                working_string = working_string[code_block_end + 3:]
+                                await phrase_queue.put("Code presented on screen")
+                                in_code_block = False
+                            else:
+                                break
+                        else:
+                            if code_block_start != -1:
+                                phrase, working_string = working_string[:code_block_start], working_string[code_block_start:]
+                                if phrase.strip():
+                                    await phrase_queue.put(phrase.strip())
+                                in_code_block = True
+                            else:
+                                next_phrase_end = find_next_phrase_end(working_string)
+                                if next_phrase_end == -1:
+                                    break
+                                phrase, working_string = working_string[:next_phrase_end + 1].strip(), working_string[next_phrase_end + 1:]
+                                await phrase_queue.put(phrase)
+
+            if working_string.strip() and not in_code_block:
                 await phrase_queue.put(working_string.strip())
 
             await phrase_queue.put(None)
