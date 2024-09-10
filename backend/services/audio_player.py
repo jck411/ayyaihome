@@ -1,6 +1,6 @@
 import queue
 import threading
-from init import p, stop_event, CONSTANTS
+from init import p, stop_event, OPENAI_CONSTANTS  # Use OPENAI_CONSTANTS instead of CONSTANTS
 import asyncio
 
 def find_next_phrase_end(text: str) -> int:
@@ -8,7 +8,7 @@ def find_next_phrase_end(text: str) -> int:
     Finds the position of the next sentence-ending delimiter in the text
     starting from a specified minimum length.
     """
-    sentence_delim_pos = [text.find(d, CONSTANTS["MINIMUM_PHRASE_LENGTH"]) for d in CONSTANTS["DELIMITERS"]]
+    sentence_delim_pos = [text.find(d, OPENAI_CONSTANTS["MINIMUM_PHRASE_LENGTH"]) for d in OPENAI_CONSTANTS["DELIMITERS"]]
     sentence_delim_pos = [pos for pos in sentence_delim_pos if pos != -1]
     return min(sentence_delim_pos, default=-1)
 
@@ -21,9 +21,9 @@ def audio_player(audio_queue: queue.Queue):
     try:
         # Open the PyAudio stream for playback
         stream = p.open(
-            format=CONSTANTS["AUDIO_FORMAT"],
-            channels=CONSTANTS["CHANNELS"],
-            rate=CONSTANTS["RATE"],
+            format=OPENAI_CONSTANTS["AUDIO_FORMAT"],
+            channels=OPENAI_CONSTANTS["CHANNELS"],
+            rate=OPENAI_CONSTANTS["RATE"],
             output=True,
             frames_per_buffer=2048  # Buffer size for audio playback
         )

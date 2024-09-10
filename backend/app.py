@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from endpoints.openai import openai_router
 from endpoints.stop import stop_router
-from endpoints.anthropic import anthropic_router  # Import the new router
+from endpoints.anthropic import anthropic_router  # Import the Anthropic router
 
 # Initialize the FastAPI app
 app = FastAPI()
@@ -19,7 +19,7 @@ app.add_middleware(
 # Include routers
 app.include_router(openai_router)
 app.include_router(stop_router)
-app.include_router(anthropic_router)  # Include the new Anthropomorphic router
+app.include_router(anthropic_router)  # Include the Anthropic router
 
 if __name__ == '__main__':
     import uvicorn

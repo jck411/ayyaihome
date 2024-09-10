@@ -2,21 +2,15 @@ from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 import asyncio
 import queue
-from init import stop_event, CONSTANTS, anthropic_client
-from services.tts_service_openai import process_streams # Import process_streams for TTS handling
-from services.audio_player import find_next_phrase_end  # Import find_next_phrase_end for phrase detection
+from init import stop_event, ANTHROPIC_CONSTANTS, anthropic_client
+from services.tts_service import process_streams  # Use shared TTS service
+from services.audio_player import find_next_phrase_end
 
-# Define the router for Anthropic-related endpoints
 anthropic_router = APIRouter()
 
 @anthropic_router.post("/api/anthropic")
 async def anthropic_chat(request: Request):
-    """
-    Handles POST requests to the "/api/anthropic" endpoint.
-    Processes user input, sends it to the Anthropic API for response generation,
-    streams the text back, and uses OpenAI TTS to convert the text to speech.
-    """
-    stop_event.set()  # Signal to stop ongoing tasks
+    stop_event.set()
     await asyncio.sleep(0.1)
     stop_event.clear()
 
@@ -27,76 +21,49 @@ async def anthropic_chat(request: Request):
         if not messages:
             return {"error": "Prompt is required."}
 
-        # Initialize queues for TTS processing
         phrase_queue, audio_queue = asyncio.Queue(), queue.Queue()
 
-        # Start TTS processing in the background (OpenAI TTS)
-        asyncio.create_task(process_streams(phrase_queue, audio_queue))
+        # Use the OpenAI TTS service, but pass ANTHROPIC_CONSTANTS for voice settings
+        asyncio.create_task(process_streams(phrase_queue, audio_queue, ANTHROPIC_CONSTANTS))
 
-        # Return a streaming response from the Anthropic API
         return StreamingResponse(stream_completion(messages, phrase_queue), media_type='text/plain')
 
     except Exception as e:
         return {"error": f"Unexpected error: {str(e)}"}
 
-
-async def stream_completion(messages: list, phrase_queue: asyncio.Queue, model: str = "claude-3-5-sonnet-20240620"):
-    """
-    Streams the response from the Anthropic API.
-    Sends each chunk of the response to the phrase queue for OpenAI TTS processing.
-    """
+async def stream_completion(messages: list, phrase_queue: asyncio.Queue):
     try:
         async with anthropic_client.messages.stream(
-            model=model,
+            model=ANTHROPIC_CONSTANTS["DEFAULT_RESPONSE_MODEL"],
             messages=messages,
             max_tokens=1024,
-            temperature=0.7
+            temperature=ANTHROPIC_CONSTANTS["TEMPERATURE"]
         ) as stream:
             working_string = ""
             in_code_block = False
 
             async for chunk in stream.text_stream:
-                if stop_event.is_set():  # Stop streaming if the event is triggered
+                if stop_event.is_set():
                     await phrase_queue.put(None)
                     return
 
                 content = chunk or ""
-
                 if content:
-                    yield content  # Stream content back to client
-                    working_string += content  # Accumulate the content
+                    yield content
+                    working_string += content
 
                     while True:
-                        code_block_start = working_string.find("```")
+                        next_phrase_end = find_next_phrase_end(working_string)
+                        if next_phrase_end == -1:
+                            break
+                        phrase, working_string = working_string[:next_phrase_end + 1].strip(), working_string[next_phrase_end + 1:]
+                        await phrase_queue.put(phrase)
 
-                        if in_code_block:
-                            code_block_end = working_string.find("```", 3)
-                            if code_block_end != -1:
-                                working_string = working_string[code_block_end + 3:]
-                                await phrase_queue.put("Code presented on screen")
-                                in_code_block = False
-                            else:
-                                break
-                        else:
-                            if code_block_start != -1:
-                                phrase, working_string = working_string[:code_block_start], working_string[code_block_start:]
-                                if phrase.strip():
-                                    await phrase_queue.put(phrase.strip())
-                                in_code_block = True
-                            else:
-                                next_phrase_end = find_next_phrase_end(working_string)
-                                if next_phrase_end == -1:
-                                    break
-                                phrase, working_string = working_string[:next_phrase_end + 1].strip(), working_string[next_phrase_end + 1:]
-                                await phrase_queue.put(phrase)
-
-            if working_string.strip() and not in_code_block:
+            if working_string.strip():
                 await phrase_queue.put(working_string.strip())
 
-            await phrase_queue.put(None)  # Signal the end of the stream to the TTS processor
+            await phrase_queue.put(None)
 
     except Exception as e:
-        print(f"Error in stream_completion: {e}")
         await phrase_queue.put(None)
         yield f"Error: {e}"
-

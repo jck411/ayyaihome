@@ -11,21 +11,33 @@ load_dotenv()
 # Global stop event
 stop_event = threading.Event()
 
-# Constants used throughout the application
-CONSTANTS = {
+# Shared Constants for both OpenAI and Anthropic
+SHARED_CONSTANTS = {
     "MINIMUM_PHRASE_LENGTH": 25,
     "TTS_CHUNK_SIZE": 1024,
-    "DEFAULT_RESPONSE_MODEL": "gpt-4o-mini",
     "DEFAULT_TTS_MODEL": "tts-1",
-    "DEFAULT_VOICE": "alloy",
     "AUDIO_FORMAT": pyaudio.paInt16,
     "CHANNELS": 1,
     "RATE": 24000,
     "TTS_SPEED": 1.0,
     "TEMPERATURE": 1.0,
     "TOP_P": 1.0,
-    "DELIMITERS": [".", "?", "!"],
+    "DELIMITERS": [".", "?", "!"]
+}
+
+# Specific settings for OpenAI
+OPENAI_CONSTANTS = {
+    **SHARED_CONSTANTS,
+    "DEFAULT_RESPONSE_MODEL": "gpt-4o-mini",
+    "DEFAULT_VOICE": "alloy",  # OpenAI-specific voice
     "SYSTEM_PROMPT": {"role": "system", "content": "You are a dry but witty AI assistant"}
+}
+
+# Specific settings for Anthropic
+ANTHROPIC_CONSTANTS = {
+    **SHARED_CONSTANTS,
+    "DEFAULT_RESPONSE_MODEL": "claude-3-5-sonnet-20240620",
+    "DEFAULT_VOICE": "onyx",  # Anthropic-specific voice
 }
 
 # Initialize the OpenAI API client

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { generateAIResponse } from './services/openaiService';
 import { generateAnthropicResponse } from './services/anthropicService';
 import Sidebar from './components/Sidebar';
@@ -27,6 +27,23 @@ const ChatWebsite = () => {
   const toggleDarkMode = () => setDarkMode(!darkMode);
 
   const toggleSidebar = () => setSidebarOpen(!isSidebarOpen);
+
+  // Memoize sendStopSignal with useCallback to prevent redefinition on every render
+  const sendStopSignal = useCallback(async () => {
+    try {
+      console.log('Sending stop signal...');
+      const response = await fetch('http://localhost:8000/api/stop', {
+        method: 'POST',
+      });
+      if (!response.ok) {
+        console.error('Failed to send stop signal');
+      } else {
+        console.log('Stop signal sent successfully');
+      }
+    } catch (error) {
+      console.error('Error sending stop signal:', error);
+    }
+  }, []);  // No dependencies
 
   const sendMessage = async (e) => {
     e.preventDefault();
@@ -81,22 +98,6 @@ const ChatWebsite = () => {
     });
   };
 
-  const sendStopSignal = async () => {
-    try {
-      console.log('Sending stop signal...');
-      const response = await fetch('http://localhost:8000/api/stop', {
-        method: 'POST',
-      });
-      if (!response.ok) {
-        console.error('Failed to send stop signal');
-      } else {
-        console.log('Stop signal sent successfully');
-      }
-    } catch (error) {
-      console.error('Error sending stop signal:', error);
-    }
-  };
-
   useEffect(() => {
     const handleKeyDown = (event) => {
       if (event.key === "Enter" && event.target.tagName !== "TEXTAREA") {
@@ -111,7 +112,7 @@ const ChatWebsite = () => {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [selectedAPI]);
+  }, [sendStopSignal, selectedAPI]);  // Dependencies updated
 
   const scrollToAIMessage = (id) => {
     const element = document.getElementById(`ai-message-${id}`);
