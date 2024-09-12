@@ -8,7 +8,8 @@ import { useMessageLogic } from './MessageLogic';  // Import message logic
 
 const ChatWebsite = () => {
   const {
-    messages,
+    openaiMessages,  // Separated OpenAI messages
+    anthropicMessages,  // Separated Anthropic messages
     input,
     setInput,
     status,
@@ -21,6 +22,9 @@ const ChatWebsite = () => {
   const [darkMode, setDarkMode] = useState(true);
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [leftWidth, setLeftWidth] = useState(33);
+
+  // Ensure correct messages are passed based on the selected API
+  const messages = selectedAPI === 'openai' ? openaiMessages : anthropicMessages;
 
   useEffect(() => {
     if (darkMode) {
@@ -94,7 +98,7 @@ const ChatWebsite = () => {
           <div className="flex flex-grow overflow-hidden">
             <div className="flex" style={{ width: `${leftWidth}%` }}>
               <MessageList
-                messages={messages}
+                messages={messages || []}  // Ensure messages is always an array
                 sender="user"
                 onMessageClick={scrollToAIMessage}
               />
@@ -104,7 +108,7 @@ const ChatWebsite = () => {
               onMouseDown={handleMouseDown}
             />
             <div className="flex flex-col overflow-hidden" style={{ width: `${100 - leftWidth}%` }}>
-              <MessageList messages={messages} sender="assistant" />
+              <MessageList messages={messages || []} sender="assistant" />  {/* Ensure messages is always an array */}
             </div>
           </div>
           <MessageInput input={input} setInput={setInput} sendMessage={sendMessage} darkMode={darkMode} />
