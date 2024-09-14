@@ -2,8 +2,8 @@ from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 import asyncio
 import queue
-from init import stop_event, ANTHROPIC_CONSTANTS, anthropic_client  # Correct imports
-from services.tts_service import process_streams  # Use shared TTS service
+from init import stop_event, ANTHROPIC_CONSTANTS, anthropic_client
+from services.tts_service import process_streams
 from services.audio_player import find_next_phrase_end
 
 anthropic_router = APIRouter()
@@ -16,10 +16,10 @@ async def anthropic_chat(request: Request):
 
     try:
         data = await request.json()
-        messages = [{"role": msg["role"], "content": msg["content"]} for msg in data.get('messages', [])]
+        messages = data.get('messages', [])
 
         if not messages:
-            return {"error": "Prompt is required."}
+            return {"error": "Messages are required."}
 
         # Initialize queues for TTS processing
         phrase_queue, audio_queue = asyncio.Queue(), queue.Queue()
@@ -43,12 +43,20 @@ async def stream_completion(messages: list, phrase_queue: asyncio.Queue):
             working_string = ""
             in_code_block = False
 
-            async for chunk in stream.text_stream:
+            async for chunk in stream:
                 if stop_event.is_set():
                     await phrase_queue.put(None)
                     return
 
-                content = chunk or ""
+                if chunk.type == "content_block_start":
+                    continue
+                elif chunk.type == "content_block_delta":
+                    content = chunk.delta.text or ""
+                elif chunk.type == "content_block_stop":
+                    content = ""
+                else:
+                    continue
+
                 if content:
                     yield content
                     working_string += content

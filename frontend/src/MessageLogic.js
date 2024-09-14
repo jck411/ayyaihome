@@ -11,35 +11,33 @@ export const useMessageLogic = () => {
 
   const sendStopSignal = useCallback(async () => {
     try {
-      console.log('Sending stop signal...');
       const response = await fetch('http://localhost:8000/api/stop', {
         method: 'POST',
       });
       if (!response.ok) {
-        console.error('Failed to send stop signal');
-      } else {
-        console.log('Stop signal sent successfully');
+        // Handle stop signal failure
       }
     } catch (error) {
-      console.error('Error sending stop signal:', error);
+      // Handle stop signal error
     }
   }, []);
 
-  // Function to send a message and handle the API response
   const sendMessage = async () => {
     if (!input.trim()) return;
 
-    const timestamp = new Date().toLocaleTimeString();
-    const userMessage = { id: Date.now(), text: input, sender: "user", timestamp };
+    const userMessage = {
+      id: `msg_${Date.now()}`,
+      type: "message",
+      role: "user",
+      content: [{ type: "text", text: input }],
+      timestamp: new Date().toLocaleTimeString()  // Add timestamp to user message
+    };
 
-    // Update the context directly without assigning to 'context' variable
     if (selectedAPI === 'openai') {
       setOpenaiMessages((prevMessages) => [...prevMessages, userMessage]);
     } else if (selectedAPI === 'anthropic') {
       setAnthropicMessages((prevMessages) => [...prevMessages, userMessage]);
     }
-
-    console.log('User message sent:', userMessage);  // Log user message
 
     setInput("");
     setStatus("Listening...");
@@ -57,41 +55,30 @@ export const useMessageLogic = () => {
       }
       setStatus("Online");
     } catch (error) {
-      console.error('Error:', error);
       setStatus("Offline");
     }
   };
 
-  // Function to update messages based on API response
   const updateMessages = (content, messageId, isComplete = false, api) => {
     const setContext = api === 'openai' ? setOpenaiMessages : setAnthropicMessages;
 
     setContext((prevMessages) => {
       const updatedMessages = [...prevMessages];
       const existingAssistantMessage = updatedMessages.find(
-        (msg) => msg.sender === "assistant" && msg.id === messageId + 1
+        (msg) => msg.role === "assistant" && msg.id === `msg_${parseInt(messageId.split('_')[1]) + 1}`
       );
 
       if (existingAssistantMessage) {
-        existingAssistantMessage.text = content;
-        if (isComplete) {
-          console.log('Final assistant message:', existingAssistantMessage);  // Log final message
-        }
+        existingAssistantMessage.content[0].text = content;
       } else {
         const newAssistantMessage = {
-          id: messageId + 1,
-          text: content,
-          sender: "assistant",
-          timestamp: new Date().toLocaleTimeString(),
+          id: `msg_${parseInt(messageId.split('_')[1]) + 1}`,
+          type: "message",
+          role: "assistant",
+          content: [{ type: "text", text: content }],
+          timestamp: new Date().toLocaleTimeString()  // Add timestamp to assistant message
         };
         updatedMessages.push(newAssistantMessage);
-        if (isComplete) {
-          console.log('New assistant message added:', newAssistantMessage);  // Log final message
-        }
-      }
-
-      if (isComplete) {
-        console.log('Updated messages:', updatedMessages);  // Log full messages once completed
       }
 
       return updatedMessages;

@@ -2,8 +2,8 @@
 export const generateAnthropicResponse = async (messages, onUpdate) => {
   try {
     const formattedMessages = messages.map(msg => ({
-      role: msg.sender === "user" ? "user" : "assistant",  // Ensure correct roles
-      content: msg.text
+      role: msg.role,
+      content: msg.content[0].text
     }));
 
     const response = await fetch('http://localhost:8000/api/anthropic', {
@@ -15,7 +15,7 @@ export const generateAnthropicResponse = async (messages, onUpdate) => {
     });
 
     if (!response.ok) {
-      return;
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
 
     const reader = response.body.getReader();
@@ -27,9 +27,12 @@ export const generateAnthropicResponse = async (messages, onUpdate) => {
       if (done) break;
       const content = decoder.decode(value, { stream: true });
       fullContent += content;
-      onUpdate(fullContent);
+      onUpdate(fullContent, false);
     }
+
+    onUpdate(fullContent, true);
   } catch (error) {
+    console.error('Error in generateAnthropicResponse:', error);
     throw error;
   }
 };

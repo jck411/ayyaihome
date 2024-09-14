@@ -4,26 +4,25 @@ import StatusBar from './components/StatusBar';
 import MessageList from './components/MessageList';
 import MessageInput from './components/MessageInput';
 import ModeToggle from './components/ModeToggle';
-import { useMessageLogic } from './MessageLogic';  // Import message logic
+import { useMessageLogic } from './MessageLogic';
 
 const ChatWebsite = () => {
   const {
-    openaiMessages,  // Separated OpenAI messages
-    anthropicMessages,  // Separated Anthropic messages
+    openaiMessages,
+    anthropicMessages,
     input,
     setInput,
     status,
     sendMessage,
     selectedAPI,
     setSelectedAPI,
-    sendStopSignal,  // Ensure sendStopSignal is destructured here
-  } = useMessageLogic();  // Use the custom hook for messaging logic
+    sendStopSignal,
+  } = useMessageLogic();
 
   const [darkMode, setDarkMode] = useState(true);
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [leftWidth, setLeftWidth] = useState(33);
 
-  // Ensure correct messages are passed based on the selected API
   const messages = selectedAPI === 'openai' ? openaiMessages : anthropicMessages;
 
   useEffect(() => {
@@ -38,7 +37,7 @@ const ChatWebsite = () => {
     const handleKeyDown = (event) => {
       if (event.key === "Enter" && event.target.tagName !== "TEXTAREA") {
         event.preventDefault();
-        sendStopSignal();  // Call sendStopSignal when Enter is pressed
+        sendStopSignal();
         console.log('Sending stop signal via Enter key');
       }
     };
@@ -48,7 +47,7 @@ const ChatWebsite = () => {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [sendStopSignal, selectedAPI]);  // Ensure dependencies are updated
+  }, [sendStopSignal, selectedAPI]);
 
   const toggleDarkMode = () => setDarkMode(!darkMode);
   const toggleSidebar = () => setSidebarOpen(!isSidebarOpen);
@@ -70,12 +69,30 @@ const ChatWebsite = () => {
     document.addEventListener('mouseup', handleDragEnd);
   };
 
-  const scrollToAIMessage = (id) => {
-    const element = document.getElementById(`ai-message-${id}`);
+  // This function will scroll to the corresponding assistant message
+  const scrollToAIMessage = (userMessageId) => {
+    // Convert the user message ID to a number and increment it for the assistant message
+    const assistantMessageId = parseInt(userMessageId) + 1;
+    
+    // Find the assistant message by constructing the corresponding ID
+    const element = document.getElementById(`ai-message-msg_${assistantMessageId}`);
+  
     if (element) {
+      console.log('Attempting to scroll to:', `ai-message-msg_${assistantMessageId}`);
       element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } else {
+      // Retry after a short delay if the element is not found
+      setTimeout(() => {
+        const retryElement = document.getElementById(`ai-message-msg_${assistantMessageId}`);
+        if (retryElement) {
+          retryElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        } else {
+          console.error(`Element not found for id: ${assistantMessageId}`);
+        }
+      }, 500); // Adjust the delay if necessary
     }
   };
+  
 
   return (
     <div className={`min-h-screen w-full flex ${darkMode ? 'bg-dark-bg text-dark-text' : 'bg-light-bg text-light-text'}`}>
@@ -98,8 +115,8 @@ const ChatWebsite = () => {
           <div className="flex flex-grow overflow-hidden">
             <div className="flex" style={{ width: `${leftWidth}%` }}>
               <MessageList
-                messages={messages || []}  // Ensure messages is always an array
-                sender="user"
+                messages={messages || []}
+                role="user"
                 onMessageClick={scrollToAIMessage}
               />
             </div>
@@ -108,7 +125,7 @@ const ChatWebsite = () => {
               onMouseDown={handleMouseDown}
             />
             <div className="flex flex-col overflow-hidden" style={{ width: `${100 - leftWidth}%` }}>
-              <MessageList messages={messages || []} sender="assistant" />  {/* Ensure messages is always an array */}
+              <MessageList messages={messages || []} role="assistant" />
             </div>
           </div>
           <MessageInput input={input} setInput={setInput} sendMessage={sendMessage} darkMode={darkMode} />
