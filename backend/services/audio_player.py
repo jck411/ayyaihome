@@ -1,7 +1,6 @@
 import queue
 import threading
 from init import p, stop_event, OPENAI_CONSTANTS  # Use OPENAI_CONSTANTS instead of CONSTANTS
-import asyncio
 
 def find_next_phrase_end(text: str) -> int:
     """
@@ -33,17 +32,17 @@ def audio_player(audio_queue: queue.Queue):
             # Get the next chunk of audio data
             audio_data = audio_queue.get()
 
-            if asyncio.iscoroutine(audio_data):
-                # If somehow a coroutine got into the queue, this will catch it
-                raise TypeError("Coroutines cannot be played as audio. Ensure correct data is passed.")
-            
             if audio_data is None:
                 break  # Exit if there's no more audio data
+
+            # Ensure audio data is in the correct PCM format
+            if not isinstance(audio_data, (bytes, bytearray)):
+                continue
 
             # Play the audio data
             stream.write(audio_data)
     except Exception as e:
-        print(f"Error in audio player: {e}")
+        pass
     finally:
         if stream:
             stream.stop_stream()  # Stop the audio stream
@@ -53,4 +52,4 @@ def start_audio_player(audio_queue: queue.Queue):
     """
     Starts the audio player in a separate thread.
     """
-    threading.Thread(target=audio_player, args=(audio_queue,)).start()
+    threading.Thread(target=audio_player, args=(audio_queue,), daemon=True).start()
