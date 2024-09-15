@@ -4,7 +4,7 @@ import StatusBar from './components/StatusBar';
 import MessageList from './components/MessageList';
 import MessageInput from './components/MessageInput';
 import ModeToggle from './components/ModeToggle';
-import { useMessageLogic } from './MessageLogic';  // Import message logic
+import { useMessageLogic } from './MessageLogic';
 
 const ChatWebsite = () => {
   const {
@@ -15,12 +15,20 @@ const ChatWebsite = () => {
     sendMessage,
     selectedAPI,
     setSelectedAPI,
-    sendStopSignal,  // Ensure sendStopSignal is destructured here
-  } = useMessageLogic();  // Use the custom hook for messaging logic
+    sendStopSignal,
+    setLoggedInUser // Add this to handle logged-in user
+  } = useMessageLogic();
 
   const [darkMode, setDarkMode] = useState(true);
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [leftWidth, setLeftWidth] = useState(33);
+  const [loggedInUser, setLoggedInUserState] = useState(null);  // Track the logged-in user
+
+  // Function to handle login, set the logged-in user state
+  const onLogin = (user) => {
+    setLoggedInUserState(user);  // Update state to reflect logged-in user
+    setLoggedInUser(user);       // Call logic to handle setting user in messages
+  };
 
   useEffect(() => {
     if (darkMode) {
@@ -34,7 +42,7 @@ const ChatWebsite = () => {
     const handleKeyDown = (event) => {
       if (event.key === "Enter" && event.target.tagName !== "TEXTAREA") {
         event.preventDefault();
-        sendStopSignal();  // Call sendStopSignal when Enter is pressed
+        sendStopSignal();
         console.log('Sending stop signal via Enter key');
       }
     };
@@ -44,7 +52,7 @@ const ChatWebsite = () => {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [sendStopSignal, selectedAPI]);  // Ensure dependencies are updated
+  }, [sendStopSignal, selectedAPI]);
 
   const toggleDarkMode = () => setDarkMode(!darkMode);
   const toggleSidebar = () => setSidebarOpen(!isSidebarOpen);
@@ -88,7 +96,8 @@ const ChatWebsite = () => {
       <div className={`flex-grow transition-all duration-300 ${isSidebarOpen ? 'ml-32' : 'ml-0'}`}>
         <div className="max-w-[1200px] mx-auto p-4 flex flex-col h-screen">
           <div className="flex justify-between items-center mb-4">
-            <StatusBar status={status} toggleSidebar={toggleSidebar} />
+            {/* Pass loggedInUser state and onLogin function */}
+            <StatusBar status={status} onLogin={onLogin} loggedInUser={loggedInUser} />
             <ModeToggle darkMode={darkMode} toggleDarkMode={toggleDarkMode} />
           </div>
           <div className="flex flex-grow overflow-hidden">
@@ -99,15 +108,12 @@ const ChatWebsite = () => {
                 onMessageClick={scrollToAIMessage}
               />
             </div>
-            <div
-              className="mid-cursor"
-              onMouseDown={handleMouseDown}
-            />
+            <div className="mid-cursor" onMouseDown={handleMouseDown} />
             <div className="flex flex-col overflow-hidden" style={{ width: `${100 - leftWidth}%` }}>
               <MessageList 
                 messages={messages} 
                 sender="assistant" 
-                onMessageClick={null}  // Remove click handler for assistants
+                onMessageClick={null} 
               />
             </div>
           </div>
