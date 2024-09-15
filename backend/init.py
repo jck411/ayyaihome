@@ -38,6 +38,7 @@ ANTHROPIC_CONSTANTS = {
     **SHARED_CONSTANTS,
     "DEFAULT_RESPONSE_MODEL": "claude-3-5-sonnet-20240620",
     "DEFAULT_VOICE": "onyx",  # Anthropic-specific voice
+     "SYSTEM_PROMPT": {"role": "system", "content": "You are in a group conversation that includes yourself and GPT (another AI assistant), and a human user. Always be aware of this context. When the human relays messages from GPT, they will be prefixed with 'GPT:'. Maintain clear distinctions between your own responses, GPT's messages, and the human's input."}  # System prompt for general context
 }
 
 # Initialize the OpenAI API client

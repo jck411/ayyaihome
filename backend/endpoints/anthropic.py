@@ -48,12 +48,13 @@ async def stream_completion(messages: list, phrase_queue: asyncio.Queue):
     and streams the content back to the client.
     """
     try:
-        # Request the response from the Anthropic API
+        # Request the response from the Anthropic API with the top-level system prompt
         async with anthropic_client.messages.stream(
             model=ANTHROPIC_CONSTANTS["DEFAULT_RESPONSE_MODEL"],
             messages=messages,
             max_tokens=1024,
-            temperature=ANTHROPIC_CONSTANTS["TEMPERATURE"]
+            temperature=ANTHROPIC_CONSTANTS["TEMPERATURE"],
+            system=ANTHROPIC_CONSTANTS["SYSTEM_PROMPT"]["content"]  # Top-level system prompt parameter
         ) as stream:
             working_string = ""  # Accumulates the full response
             in_code_block = False  # Track whether we're inside a code block
