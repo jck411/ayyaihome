@@ -49,10 +49,17 @@ const MessageList = ({ messages, sender, onMessageClick }) => {
             key={message.id} 
             id={`${sender === 'assistant' ? `ai-message-${message.id}` : ''}`}
             className={`mb-2 ${sender === 'assistant' ? 'ai-response' : 'user-response'}`}
-            onClick={sender === 'user' ? () => onMessageClick(message.id + 1) : null}
-            style={{ cursor: sender === 'user' ? 'pointer' : 'default' }}
+            onClick={sender === 'user' && onMessageClick ? () => onMessageClick(message.id + 1) : null}
+            style={{ cursor: sender === 'user' && onMessageClick ? 'pointer' : 'default' }}
           >
-            <span className="font-bold">{message.sender}: </span>
+            {/* Determine the label for the assistant based on metadata */}
+            <span className="font-bold">
+              {message.sender === 'assistant'
+                ? message.metadata?.assistantType === 'openai'
+                  ? 'OpenAI: '  // Label for OpenAI assistant
+                  : 'Anthropic: '  // Label for Anthropic assistant
+                : 'User: '}
+            </span>
             {renderMessageContent(message.text)}
             <span className="block text-xs text-gray-500">{message.timestamp}</span>
           </div>

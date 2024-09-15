@@ -104,7 +104,11 @@ const ChatWebsite = () => {
               onMouseDown={handleMouseDown}
             />
             <div className="flex flex-col overflow-hidden" style={{ width: `${100 - leftWidth}%` }}>
-              <MessageList messages={messages} sender="assistant" />
+              <MessageList 
+                messages={messages} 
+                sender="assistant" 
+                onMessageClick={null}  // Remove click handler for assistants
+              />
             </div>
           </div>
           <MessageInput input={input} setInput={setInput} sendMessage={sendMessage} darkMode={darkMode} />
