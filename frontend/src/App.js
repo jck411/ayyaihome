@@ -3,7 +3,6 @@ import Sidebar from './components/Sidebar';
 import StatusBar from './components/StatusBar';
 import MessageList from './components/MessageList';
 import MessageInput from './components/MessageInput';
-import ModeToggle from './components/ModeToggle';
 import { useMessageLogic } from './MessageLogic';
 
 const ChatWebsite = () => {
@@ -16,7 +15,7 @@ const ChatWebsite = () => {
     selectedAPI,
     setSelectedAPI,
     sendStopSignal,
-    setLoggedInUser // Add this to handle logged-in user
+    setLoggedInUser // Handle logged-in user
   } = useMessageLogic();
 
   const [darkMode, setDarkMode] = useState(true);
@@ -30,6 +29,10 @@ const ChatWebsite = () => {
     setLoggedInUser(user);       // Call logic to handle setting user in messages
   };
 
+  // Function to toggle dark mode
+  const toggleDarkMode = () => setDarkMode(!darkMode);
+
+  // Effect to add or remove dark mode class from the body
   useEffect(() => {
     if (darkMode) {
       document.body.classList.add('dark-mode');
@@ -38,6 +41,7 @@ const ChatWebsite = () => {
     }
   }, [darkMode]);
 
+  // Handle other app logic (like sending a stop signal on Enter key press)
   useEffect(() => {
     const handleKeyDown = (event) => {
       if (event.key === "Enter" && event.target.tagName !== "TEXTAREA") {
@@ -54,7 +58,6 @@ const ChatWebsite = () => {
     };
   }, [sendStopSignal, selectedAPI]);
 
-  const toggleDarkMode = () => setDarkMode(!darkMode);
   const toggleSidebar = () => setSidebarOpen(!isSidebarOpen);
 
   const handleDrag = (e) => {
@@ -96,9 +99,14 @@ const ChatWebsite = () => {
       <div className={`flex-grow transition-all duration-300 ${isSidebarOpen ? 'ml-32' : 'ml-0'}`}>
         <div className="max-w-[1200px] mx-auto p-4 flex flex-col h-screen">
           <div className="flex justify-between items-center mb-4">
-            {/* Pass loggedInUser state and onLogin function */}
-            <StatusBar status={status} onLogin={onLogin} loggedInUser={loggedInUser} />
-            <ModeToggle darkMode={darkMode} toggleDarkMode={toggleDarkMode} />
+            {/* Pass loggedInUser state, onLogin function, darkMode, and toggleDarkMode */}
+            <StatusBar 
+              status={status} 
+              onLogin={onLogin} 
+              loggedInUser={loggedInUser} 
+              darkMode={darkMode} 
+              toggleDarkMode={toggleDarkMode} 
+            />
           </div>
           <div className="flex flex-grow overflow-hidden">
             <div className="flex" style={{ width: `${leftWidth}%` }}>

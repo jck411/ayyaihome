@@ -9,10 +9,17 @@ export const generateAnthropicResponse = async (messages, onUpdate) => {
           role: "assistant",  // Keep the role as "assistant"
           content: `GPT: ${msg.text}`  // Add "GPT:" prefix to the content
         };
-      } else {
-        // For all other messages, keep the content and role as they are
+      } else if (msg.sender === "user") {
+        // Add prefix for the logged-in user based on metadata
+        const userPrefix = msg.metadata?.user && msg.metadata.user !== "Guest" ? `${msg.metadata.user}: ` : "";
         return {
-          role: msg.sender === "user" ? "user" : "assistant",
+          role: "user",  // Role is 'user'
+          content: `${userPrefix}${msg.text}`  // Prefix content with user name, or leave as is for Guest
+        };
+      } else {
+        // For assistant messages, handle them normally
+        return {
+          role: "assistant",
           content: msg.text
         };
       }

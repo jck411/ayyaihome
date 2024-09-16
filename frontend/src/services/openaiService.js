@@ -3,15 +3,17 @@ export const generateAIResponse = async (messages, onUpdate, selectedAPI) => {
   try {
     // Format the messages to include 'role' and 'content' fields
     const formattedMessages = messages.map(msg => {
-      // Check if the message is from the Anthropic assistant using metadata and if we are sending to OpenAI
-      if (selectedAPI === "openai" && msg.sender === "assistant" && msg.metadata?.assistantType === "anthropic") {
+      if (msg.sender === "user") {
+        // Add prefix for the logged-in user based on metadata
+        const userPrefix = msg.metadata?.user && msg.metadata.user !== "Guest" ? `${msg.metadata.user}: ` : "";
         return {
-          role: "user",  // Change role to 'user' for Anthropic assistant messages
-          content: `Claude: ${msg.text}`  // Prefix the content with 'Claude:'
+          role: "user",  // Role is 'user'
+          content: `${userPrefix}${msg.text}`  // Prefix content with user name, or leave as is for Guest
         };
       } else {
+        // Assistant messages are left unchanged
         return {
-          role: msg.sender === "user" ? "user" : "assistant",
+          role: "assistant",
           content: msg.text
         };
       }

@@ -43,22 +43,22 @@ const MessageList = ({ messages, sender, onMessageClick }) => {
   return (
     <div className="flex-grow overflow-y-auto mb-4 p-4 max-h-full">
       {messages
-        .filter((message) => message.sender === sender)
+        .filter((message) => message.sender === sender || (sender === 'user' && message.metadata?.user))
         .map((message) => (
           <div 
             key={message.id} 
-            id={`${sender === 'assistant' ? `ai-message-${message.id}` : ''}`}
-            className={`mb-2 ${sender === 'assistant' ? 'ai-response' : 'user-response'}`}
-            onClick={sender === 'user' && onMessageClick ? () => onMessageClick(message.id + 1) : null}
-            style={{ cursor: sender === 'user' && onMessageClick ? 'pointer' : 'default' }}
+            id={`${message.sender === 'assistant' ? `ai-message-${message.id}` : ''}`}
+            className={`mb-2 ${message.sender === 'assistant' ? 'ai-response' : 'user-response'}`}
+            onClick={message.sender === 'user' && onMessageClick ? () => onMessageClick(message.id + 1) : null}
+            style={{ cursor: message.sender === 'user' && onMessageClick ? 'pointer' : 'default' }}
           >
-            {/* Determine the label for the assistant based on metadata */}
+            {/* Determine the label for the sender based on metadata */}
             <span className="font-bold">
               {message.sender === 'assistant'
                 ? message.metadata?.assistantType === 'openai'
                   ? 'OpenAI: '  // Label for OpenAI assistant
                   : 'Anthropic: '  // Label for Anthropic assistant
-                : 'User: '}
+                : `${message.metadata?.user || 'User'}: `}  {/* Dynamic label for logged-in user */}
             </span>
             {renderMessageContent(message.text)}
             <span className="block text-xs text-gray-500">{message.timestamp}</span>
