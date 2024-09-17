@@ -15,7 +15,9 @@ const App = () => {
     selectedAPI,
     setSelectedAPI,
     sendStopSignal,
-    setLoggedInUser
+    setLoggedInUser,
+    ttsEnabled,           // Get ttsEnabled state
+    setTtsEnabled         // Get setTtsEnabled function
   } = useMessageLogic();
 
   const [darkMode, setDarkMode] = useState(true);
@@ -89,6 +91,8 @@ const App = () => {
           selectedAPI={selectedAPI}
           setSelectedAPI={setSelectedAPI}
           darkMode={darkMode}
+          ttsEnabled={ttsEnabled}           // Pass ttsEnabled to Sidebar
+          setTtsEnabled={setTtsEnabled}     // Pass setTtsEnabled to Sidebar
         />
       </div>
 

@@ -8,6 +8,7 @@ export const useMessageLogic = () => {
   const [status, setStatus] = useState("Online");
   const [selectedAPI, setSelectedAPI] = useState('openai');
   const [loggedInUser, setLoggedInUser] = useState('guest');  // State to track the logged-in user
+  const [ttsEnabled, setTtsEnabled] = useState(true);  // New state to track TTS toggle
 
   const sendStopSignal = useCallback(async () => {
     try {
@@ -53,11 +54,11 @@ export const useMessageLogic = () => {
       if (selectedAPI === 'openai') {
         await generateAIResponse(context, (content, isComplete) => {
           updateMessages(content, userMessage.id, isComplete);
-        }, selectedAPI);
+        }, selectedAPI, ttsEnabled);  // Pass ttsEnabled to OpenAI service
       } else if (selectedAPI === 'anthropic') {
         await generateAnthropicResponse(context, (content, isComplete) => {
           updateMessages(content, userMessage.id, isComplete);
-        }, selectedAPI);
+        }, ttsEnabled);  // Pass ttsEnabled to Anthropic service
       }
 
       setStatus("Online");
@@ -100,6 +101,8 @@ export const useMessageLogic = () => {
     selectedAPI,
     setSelectedAPI,
     sendStopSignal,
-    setLoggedInUser  // Function to log in a user
+    setLoggedInUser,
+    ttsEnabled,           // Expose TTS toggle state
+    setTtsEnabled         // Expose function to toggle TTS
   };
 };

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 import asyncio
-import queue  # Import the synchronous queue
+import queue
 from init import stop_event, ANTHROPIC_CONSTANTS, anthropic_client
 from services.tts_service import process_streams
 from services.audio_player import find_next_phrase_end
@@ -27,12 +27,16 @@ async def anthropic_chat(request: Request):
         if not messages:
             return {"error": "Prompt is required."}
 
-        # Initialize queues for TTS processing
-        phrase_queue = asyncio.Queue()
-        audio_queue = queue.Queue()  # Changed to synchronous queue.Queue()
+        tts_enabled = data.get('ttsEnabled', True)  # Get TTS enabled state from the request
 
-        # Start TTS processing in the background
-        asyncio.create_task(process_streams(phrase_queue, audio_queue, ANTHROPIC_CONSTANTS))
+        # Initialize phrase queue only if TTS is enabled
+        phrase_queue = None
+        if tts_enabled:
+            phrase_queue = asyncio.Queue()
+            audio_queue = queue.Queue()  # Synchronous queue for audio processing
+
+            # Start TTS processing in the background
+            asyncio.create_task(process_streams(phrase_queue, audio_queue, ANTHROPIC_CONSTANTS))
 
         # Stream response back to the client
         return StreamingResponse(stream_completion(messages, phrase_queue), media_type='text/plain')
@@ -44,7 +48,7 @@ async def anthropic_chat(request: Request):
 async def stream_completion(messages: list, phrase_queue: asyncio.Queue):
     """
     Streams the response from the Anthropic API.
-    Processes each chunk of the response, adds it to the phrase queue for text-to-speech conversion,
+    Processes each chunk of the response, adds it to the phrase queue for text-to-speech conversion if TTS is enabled,
     and streams the content back to the client.
     """
     try:
@@ -62,7 +66,8 @@ async def stream_completion(messages: list, phrase_queue: asyncio.Queue):
             # Stream the response chunks as they arrive
             async for chunk in stream.text_stream:
                 if stop_event.is_set():
-                    await phrase_queue.put(None)
+                    if phrase_queue:
+                        await phrase_queue.put(None)
                     break
 
                 content = chunk or ""
@@ -83,7 +88,8 @@ async def stream_completion(messages: list, phrase_queue: asyncio.Queue):
                             if code_block_end != -1:
                                 # End the code block
                                 working_string = working_string[code_block_end + 3:]
-                                await phrase_queue.put("Code presented on screen")
+                                if phrase_queue:
+                                    await phrase_queue.put("Code presented on screen")
                                 in_code_block = False
                             else:
                                 break
@@ -92,7 +98,7 @@ async def stream_completion(messages: list, phrase_queue: asyncio.Queue):
                             if code_block_start != -1:
                                 # Extract phrase before the code block
                                 phrase, working_string = working_string[:code_block_start], working_string[code_block_start:]
-                                if phrase.strip():
+                                if phrase.strip() and phrase_queue:
                                     await phrase_queue.put(phrase.strip())
                                 in_code_block = True
                             else:
@@ -102,17 +108,21 @@ async def stream_completion(messages: list, phrase_queue: asyncio.Queue):
                                     break
                                 # Send the phrase for TTS
                                 phrase, working_string = working_string[:next_phrase_end + 1].strip(), working_string[next_phrase_end + 1:]
-                                await phrase_queue.put(phrase)
+                                if phrase_queue:
+                                    await phrase_queue.put(phrase)
 
         # Send the final accumulated text
-        if working_string.strip() and not in_code_block:
+        if working_string.strip() and not in_code_block and phrase_queue:
             await phrase_queue.put(working_string.strip())
 
         # End the TTS processing
-        await phrase_queue.put(None)
+        if phrase_queue:
+            await phrase_queue.put(None)
 
     except asyncio.TimeoutError:
-        await phrase_queue.put(None)
+        if phrase_queue:
+            await phrase_queue.put(None)
     except Exception as e:
-        await phrase_queue.put(None)
+        if phrase_queue:
+            await phrase_queue.put(None)
         yield f"Error: {e}"

@@ -1,5 +1,5 @@
 // Define an asynchronous function to generate an Anthropic AI response
-export const generateAnthropicResponse = async (messages, onUpdate) => {
+export const generateAnthropicResponse = async (messages, onUpdate, ttsEnabled) => {
   try {
     // Format the messages, prefix "GPT: " for OpenAI assistant messages based on metadata
     const formattedMessages = messages.map(msg => {
@@ -27,13 +27,13 @@ export const generateAnthropicResponse = async (messages, onUpdate) => {
 
     console.log("Formatted messages before sending to Anthropic:", formattedMessages);
 
-    // Send the formatted messages to the Anthropic backend
+    // Send the formatted messages and TTS state to the Anthropic backend
     const response = await fetch('http://localhost:8000/api/anthropic', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ messages: formattedMessages })
+      body: JSON.stringify({ messages: formattedMessages, ttsEnabled })  // Include ttsEnabled in the request body
     });
 
     if (!response.ok) {

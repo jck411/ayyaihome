@@ -1,5 +1,5 @@
 // Define an asynchronous function to generate an OpenAI or Anthropic response
-export const generateAIResponse = async (messages, onUpdate, selectedAPI) => {
+export const generateAIResponse = async (messages, onUpdate, selectedAPI, ttsEnabled) => {
   try {
     // Format the messages to include 'role' and 'content' fields
     const formattedMessages = messages.map(msg => {
@@ -21,13 +21,13 @@ export const generateAIResponse = async (messages, onUpdate, selectedAPI) => {
 
     console.log("Formatted messages before sending to OpenAI:", formattedMessages); // Debugging log
 
-    // Send the formatted messages to the OpenAI backend
+    // Send the formatted messages and TTS state to the OpenAI backend
     const response = await fetch('http://localhost:8000/api/openai', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ messages: formattedMessages })
+      body: JSON.stringify({ messages: formattedMessages, ttsEnabled })  // Include ttsEnabled in the request body
     });
 
     if (!response.ok) {
