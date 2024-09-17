@@ -1,12 +1,25 @@
 import React from 'react';
 import ModeToggle from './ModeToggle';
+import { FiMenu } from 'react-icons/fi';
 
-const StatusBar = ({ status, onLogin, loggedInUser, darkMode, toggleDarkMode }) => {
+const StatusBar = ({
+  status,
+  onLogin,
+  loggedInUser,
+  darkMode,
+  toggleDarkMode,
+  toggleSidebar
+}) => {
   return (
-    <div className="flex items-center justify-between mb-4 relative z-10 w-full">
-      {/* Left side with user buttons */}
+    <div className="flex items-center justify-between w-full space-x-4 overflow-x-auto bg-inherit p-4">
+      {/* Left side with Sidebar toggle and User logins */}
       <div className="flex items-center space-x-4">
-        {/* Display the names with background only when the user is logged in */}
+        {/* Sidebar toggle icon */}
+        <div className="cursor-pointer p-2" onClick={toggleSidebar}>
+          <FiMenu size={24} style={{ color: 'var(--contrast-orange)' }} />
+        </div>
+
+        {/* User login buttons */}
         <span
           onClick={() => onLogin('Jack')}
           className={`cursor-pointer px-2 py-1 ${
@@ -39,11 +52,8 @@ const StatusBar = ({ status, onLogin, loggedInUser, darkMode, toggleDarkMode }) 
       </div>
 
       {/* Right side with Online status and ModeToggle */}
-      <div className="flex items-center space-x-4 ml-auto">
-        {/* Online status */}
-        <span className="text-lg font-bold text-contrast-orange">Online</span>
-
-        {/* ModeToggle component for dark mode */}
+      <div className="flex items-center space-x-4">
+        <span className="text-lg font-bold text-contrast-orange whitespace-nowrap">Online</span>
         <ModeToggle darkMode={darkMode} toggleDarkMode={toggleDarkMode} />
       </div>
     </div>

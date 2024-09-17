@@ -1,3 +1,24 @@
+/* Reset and base styles */
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--light-bg);
+  color: var(--light-text);
+  transition: background-color 0.3s, color 0.3s;
+  overflow: hidden; /* Prevent body scroll */
+}
+
+/* Dark mode styling */
+body.dark-mode {
+  background-color: var(--dark-bg);
+  color: var(--dark-text);
+}
+
+/* Root variables */
 :root {
   --contrast-orange: #CC5500; /* Burnt orange color */
   --dark-bg: #1D1F21; /* Background color for dark mode */
@@ -6,29 +27,14 @@
   --light-text: #1f1e1e; /* Dark text color for light mode */
   --message-text-light: #1f1e1e; /* Default text color for light mode */
   --message-text-dark: #CC5500; /* Burnt orange for dark mode */
+  --status-bar-height: 50px; /* Define your status bar height here */
+
 }
 
+/* Tailwind base imports */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  background-color: var(--light-bg); /* Default light mode background */
-  color: var(--light-text); /* Default light mode text color */
-  transition: background-color 0.3s, color 0.3s; /* Smooth transition between modes */
-}
-
-/* Dark mode styling */
-body.dark-mode {
-  background-color: var(--dark-bg); /* Dark mode background */
-  color: var(--dark-text); /* Light text for dark mode */
-}
 
 /* Custom scrollbar styles */
 ::-webkit-scrollbar {
@@ -46,59 +52,106 @@ body.dark-mode {
 }
 
 /* Mid-cursor for dragging */
-.mid-cursor {
-  width: 1px; /* Thinner cursor */
-  height: 90%; /* Shorter vertical height */
-  background-color: var(--contrast-orange); /* Orange color */
+.mid-cursor-wrapper {
   position: relative;
+  width: 10px; /* Increase width for easier dragging */
   cursor: col-resize;
-  top: 5px; /* Moves the entire cursor line down */
+  display: flex;
+  align-items: stretch; /* Ensure it spans the full height */
+  justify-content: center;
+}
+
+.mid-cursor {
+  width: 1px;
+  height: 100%; /* Span the full height */
+  background-color: var(--contrast-orange);
+  position: relative;
 }
 
 .mid-cursor::before {
   content: '';
   position: absolute;
+  top: 50%; /* Center vertically */
   left: 50%;
-  transform: translateX(-50%);
-  width: 8px; /* Diameter of the ball */
+  transform: translate(-50%, -50%);
+  width: 8px;
   height: 8px;
   background-color: var(--contrast-orange);
   border-radius: 50%;
 }
 
+/* Message text styling */
+.message-text {
+  color: var(--message-text-light);
+}
+
+body.dark-mode .message-text {
+  color: var(--message-text-dark) !important;
+}
+
+/* User and Assistant Label Styling */
+.font-bold {
+  color: var(--contrast-orange) !important;
+}
+
+/* Z-index adjustments */
+.z-30 {
+  z-index: 30;
+}
+
+.z-40 {
+  z-index: 40;
+}
+
+/* Ensure the main content scrolls independently */
+.main-content {
+  position: relative;
+  overflow: hidden;
+  flex-grow: 1;
+  display: flex;
+  padding-top: 5px;
+  padding-bottom: 25px;
+}
+
+/* Message list styling */
+.message-list {
+  overflow-y: auto;
+  flex-grow: 1;
+}
+
 /* Code block styling */
 .code-block-container {
-  background-color: #202123; /* Dark background color */
-  border: 1px solid #333; /* Thin border */
-  border-radius: 4px; /* Slightly rounded corners */
+  background-color: #202123;
+  border: 1px solid #333;
+  border-radius: 4px;
   padding: 16px;
   position: relative;
-  font-family: "Courier New", Courier, monospace; /* Monospaced font */
-  color: #f8f8f2; /* Light text color */
+  font-family: "Courier New", Courier, monospace;
+  color: #f8f8f2;
 }
 
 .code-block-header {
   font-size: 12px;
-  color: #bbb; /* Light grey to differentiate from code text */
+  color: #bbb;
   text-transform: uppercase;
   margin-bottom: 8px;
 }
 
-/* Syntax highlighting colors (via highlight.js theme) */
+/* Syntax highlighting colors */
 code.hljs {
-  color: #f8f8f2; /* Default code text color */
+  color: #f8f8f2;
 }
 
 code.hljs .hljs-keyword {
-  color: #c678dd; /* Keywords */
+  color: #c678dd;
 }
 
 code.hljs .hljs-string {
-  color: #98c379; /* Strings */
+  color: #98c379;
 }
 
 code.hljs .hljs-comment {
-  color: #5c6370; /* Comments */
+  color: #5c6370;
 }
 
 /* Copy button styling */
@@ -106,30 +159,16 @@ code.hljs .hljs-comment {
   position: absolute;
   top: 8px;
   right: 8px;
-  background-color: #333; /* Dark background for button */
-  color: #fff; /* White text */
+  background-color: #333;
+  color: #fff;
   border: none;
   padding: 4px 8px;
   font-size: 12px;
-  border-radius: 4px; /* Rounded corners */
+  border-radius: 4px;
   cursor: pointer;
   transition: background-color 0.2s ease;
 }
 
 .copy-code-button:hover {
-  background-color: #555; /* Lighter background on hover */
-}
-
-/* Message Text Styling for Both AI and User */
-.message-text {
-  color: var(--message-text-light); /* Default to light mode text color */
-}
-
-body.dark-mode .message-text {
-  color: var(--message-text-dark) !important; /* Burnt orange for dark mode */
-}
-
-/* User and Assistant Label Styling */
-.font-bold {
-  color: var(--contrast-orange) !important; /* Burnt orange for user and assistant labels */
+  background-color: #555;
 }

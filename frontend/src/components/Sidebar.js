@@ -1,62 +1,54 @@
 import React from 'react';
-import { FiMenu } from 'react-icons/fi'; // Importing a menu icon from react-icons
 
-const Sidebar = ({ isOpen, toggleSidebar, selectedAPI, setSelectedAPI, darkMode }) => {
+const Sidebar = ({ isOpen, selectedAPI, setSelectedAPI, darkMode }) => {
   return (
-    <>
-      {/* Indicator to toggle the sidebar */}
-      <div
-        className="fixed top-0 left-0 p-2 cursor-pointer z-50"
-        style={{ margin: '8px', color: 'var(--contrast-orange)' }}  // Use contrast orange for the icon
-      >
-        <FiMenu size={24} onClick={toggleSidebar} />
-      </div>
-
-      {/* The sidebar itself */}
-      <div
-        className={`fixed top-0 left-0 h-full transition-transform transform z-40 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
-        style={{
-          width: 'auto', // Auto width based on content
-          backgroundColor: darkMode ? 'var(--dark-bg)' : 'var(--light-bg)',  // Apply correct background color
-          color: 'var(--contrast-orange)',  // Ensure text is also orange
-        }}
-      >
-        <div className="p-4">
-          {/* Spacer to maintain the same layout */}
-          <div className="mb-4" style={{ height: '24px' }}></div>
-          
-          {/* Service Selection with Radio Buttons (Right-aligned next to text) */}
-          <div className="flex items-center mb-2 cursor-pointer" onClick={() => setSelectedAPI('openai')}>
-            <label className="font-bold mr-2" style={{ color: 'var(--contrast-orange)' }}>
+    <div
+      className={`fixed left-0 z-40 transition-transform transform ${
+        isOpen ? 'translate-x-0' : '-translate-x-full'
+      }`}
+      style={{
+        top: 'var(--status-bar-height)',
+        height: 'calc(100% - var(--status-bar-height))',
+        width: '250px',
+        backgroundColor: darkMode ? 'var(--dark-bg)' : 'var(--light-bg)',
+        color: 'var(--contrast-orange)',
+      }}
+    >
+      <div className="p-4">
+        {/* Navigation or menu items */}
+        <div className="mt-4">
+          <h2 className="font-bold text-contrast-orange">API Selection</h2>
+          <div className="mt-2">
+            <label className="block cursor-pointer">
+              <input
+                type="radio"
+                name="api-service"
+                checked={selectedAPI === 'openai'}
+                onChange={() => setSelectedAPI('openai')}
+                className="form-radio h-4 w-4 text-contrast-orange mr-2"
+                style={{ accentColor: 'var(--contrast-orange)' }}
+              />
               OpenAI
             </label>
-            <input
-              type="radio"
-              name="api-service"
-              checked={selectedAPI === 'openai'}
-              onChange={() => setSelectedAPI('openai')}
-              className="form-radio h-4 w-4 text-contrast-orange"
-              style={{ accentColor: 'var(--contrast-orange)' }} // Radio button filled with orange
-            />
-          </div>
-
-          <div className="flex items-center mb-2 cursor-pointer" onClick={() => setSelectedAPI('anthropic')}>
-            <label className="font-bold mr-2" style={{ color: 'var(--contrast-orange)' }}>
+            <label className="block cursor-pointer">
+              <input
+                type="radio"
+                name="api-service"
+                checked={selectedAPI === 'anthropic'}
+                onChange={() => setSelectedAPI('anthropic')}
+                className="form-radio h-4 w-4 text-contrast-orange mr-2"
+                style={{ accentColor: 'var(--contrast-orange)' }}
+              />
               Anthropic
             </label>
-            <input
-              type="radio"
-              name="api-service"
-              checked={selectedAPI === 'anthropic'}
-              onChange={() => setSelectedAPI('anthropic')}
-              className="form-radio h-4 w-4 text-contrast-orange"
-              style={{ accentColor: 'var(--contrast-orange)' }} // Radio button filled with orange
-            />
           </div>
-
+        </div>
+        {/* Additional sidebar content */}
+        <div className="mt-4">
+          <p className="text-contrast-orange">More sidebar content here...</p>
         </div>
       </div>
-    </>
+    </div>
   );
 };
 

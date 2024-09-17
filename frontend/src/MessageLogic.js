@@ -6,8 +6,8 @@ export const useMessageLogic = () => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [status, setStatus] = useState("Online");
-  const [selectedAPI, setSelectedAPI] = useState('anthropic');
-  const [loggedInUser, setLoggedInUser] = useState(null);  // State to track the logged-in user
+  const [selectedAPI, setSelectedAPI] = useState('openai');
+  const [loggedInUser, setLoggedInUser] = useState('guest');  // State to track the logged-in user
 
   const sendStopSignal = useCallback(async () => {
     try {

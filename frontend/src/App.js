@@ -5,7 +5,7 @@ import MessageList from './components/MessageList';
 import MessageInput from './components/MessageInput';
 import { useMessageLogic } from './MessageLogic';
 
-const ChatWebsite = () => {
+const App = () => {
   const {
     messages,
     input,
@@ -15,24 +15,22 @@ const ChatWebsite = () => {
     selectedAPI,
     setSelectedAPI,
     sendStopSignal,
-    setLoggedInUser // Handle logged-in user
+    setLoggedInUser
   } = useMessageLogic();
 
   const [darkMode, setDarkMode] = useState(true);
   const [isSidebarOpen, setSidebarOpen] = useState(false);
-  const [leftWidth, setLeftWidth] = useState(33);
-  const [loggedInUser, setLoggedInUserState] = useState(null);  // Track the logged-in user
+  const [leftWidth, setLeftWidth] = useState(30); 
+  const [loggedInUser, setLoggedInUserState] = useState(null);
 
-  // Function to handle login, set the logged-in user state
   const onLogin = (user) => {
-    setLoggedInUserState(user);  // Update state to reflect logged-in user
-    setLoggedInUser(user);       // Call logic to handle setting user in messages
+    setLoggedInUserState(user);
+    setLoggedInUser(user);
   };
 
-  // Function to toggle dark mode
   const toggleDarkMode = () => setDarkMode(!darkMode);
+  const toggleSidebar = () => setSidebarOpen(!isSidebarOpen);
 
-  // Effect to add or remove dark mode class from the body
   useEffect(() => {
     if (darkMode) {
       document.body.classList.add('dark-mode');
@@ -41,7 +39,6 @@ const ChatWebsite = () => {
     }
   }, [darkMode]);
 
-  // Handle other app logic (like sending a stop signal on Enter key press)
   useEffect(() => {
     const handleKeyDown = (event) => {
       if (event.key === "Enter" && event.target.tagName !== "TEXTAREA") {
@@ -58,10 +55,9 @@ const ChatWebsite = () => {
     };
   }, [sendStopSignal, selectedAPI]);
 
-  const toggleSidebar = () => setSidebarOpen(!isSidebarOpen);
-
   const handleDrag = (e) => {
-    const newLeftWidth = (e.clientX / window.innerWidth) * 100;
+    const containerOffset = (window.innerWidth - 950) / 2;
+    const newLeftWidth = ((e.clientX - containerOffset) / 950) * 100;
     if (newLeftWidth > 20 && newLeftWidth < 80) {
       setLeftWidth(newLeftWidth);
     }
@@ -85,39 +81,46 @@ const ChatWebsite = () => {
   };
 
   return (
-    <div className={`min-h-screen w-full flex ${darkMode ? 'bg-dark-bg text-dark-text' : 'bg-light-bg text-light-text'}`}>
-      <div className={`fixed top-0 left-0 h-full z-50 transition-transform duration-300 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+    <div className={`min-h-screen w-full`}>
+      {/* Sidebar */}
+      <div className={`fixed top-0 left-0 h-full z-30 transition-transform duration-300 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <Sidebar
           isOpen={isSidebarOpen}
-          toggleSidebar={toggleSidebar}
           selectedAPI={selectedAPI}
           setSelectedAPI={setSelectedAPI}
           darkMode={darkMode}
         />
       </div>
 
-      <div className={`flex-grow transition-all duration-300 ${isSidebarOpen ? 'ml-32' : 'ml-0'}`}>
-        <div className="max-w-[1200px] mx-auto p-4 flex flex-col h-screen">
-          <div className="flex justify-between items-center mb-4">
-            {/* Pass loggedInUser state, onLogin function, darkMode, and toggleDarkMode */}
-            <StatusBar 
-              status={status} 
-              onLogin={onLogin} 
-              loggedInUser={loggedInUser} 
-              darkMode={darkMode} 
-              toggleDarkMode={toggleDarkMode} 
-            />
-          </div>
-          <div className="flex flex-grow overflow-hidden">
-            <div className="flex" style={{ width: `${leftWidth}%` }}>
+      {/* Header */}
+      <div className="fixed top-0 left-0 right-0 z-40">
+        <StatusBar 
+          status={status} 
+          onLogin={onLogin} 
+          loggedInUser={loggedInUser} 
+          darkMode={darkMode} 
+          toggleDarkMode={toggleDarkMode}
+          toggleSidebar={toggleSidebar}
+        />
+      </div>
+
+      {/* Main content area */}
+      <div className={`flex flex-col h-screen pt-16 pb-16`}>
+        {/* Centered container with max-width */}
+        <div className="mx-auto main-content" style={{ maxWidth: '950px', width: '100%' }}>
+          {/* Chat area */}
+          <div className={`flex flex-grow overflow-hidden transition-all duration-300`}>
+            <div className="flex flex-col message-list" style={{ width: `${leftWidth}%` }}>
               <MessageList
                 messages={messages}
                 sender="user"
                 onMessageClick={scrollToAIMessage}
               />
             </div>
-            <div className="mid-cursor" onMouseDown={handleMouseDown} />
-            <div className="flex flex-col overflow-hidden" style={{ width: `${100 - leftWidth}%` }}>
+            <div className="mid-cursor-wrapper" onMouseDown={handleMouseDown}>
+              <div className="mid-cursor" />
+            </div>
+            <div className="flex flex-col message-list" style={{ width: `${100 - leftWidth}%` }}>
               <MessageList 
                 messages={messages} 
                 sender="assistant" 
@@ -125,11 +128,15 @@ const ChatWebsite = () => {
               />
             </div>
           </div>
-          <MessageInput input={input} setInput={setInput} sendMessage={sendMessage} darkMode={darkMode} />
         </div>
+      </div>
+
+      {/* Footer */}
+      <div className="fixed bottom-0 left-0 right-0 z-40">
+        <MessageInput input={input} setInput={setInput} sendMessage={sendMessage} darkMode={darkMode} />
       </div>
     </div>
   );
 };
 
-export default ChatWebsite;
+export default App;
