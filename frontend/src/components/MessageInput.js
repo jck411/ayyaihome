@@ -1,8 +1,10 @@
-import React, { useRef } from 'react';
-import { Send, Mic } from 'lucide-react';  // Importing Mic icon
+import React, { useRef, useState } from 'react';
+import { Send, Mic } from 'lucide-react';
+import STTHandler from './STTHandler';
 
-const MessageInput = ({ input, setInput, sendMessage, darkMode }) => {
+const MessageInput = ({ input, setInput, sendMessage, darkMode, setIsMicActive }) => {
   const textareaRef = useRef(null);
+  const [isMicActive, setLocalMicActive] = useState(false);
 
   const handleSendMessage = (e) => {
     e.preventDefault();
@@ -13,17 +15,31 @@ const MessageInput = ({ input, setInput, sendMessage, darkMode }) => {
     }
   };
 
+  const handleTranscription = (transcription, type) => {
+    if (type === 'transcribed') {
+      setInput(transcription); // Set final transcription into the input field
+    }
+  };
+
+  const toggleMic = () => {
+    const newMicState = !isMicActive;
+    setLocalMicActive(newMicState); // Update local mic state
+    setIsMicActive(newMicState);    // Update global mic state
+  };
+
   return (
     <div className="bg-inherit p-4">
       <div className="mx-auto" style={{ maxWidth: '600px', width: '100%' }}>
         <form onSubmit={handleSendMessage} className="flex items-start space-x-2">
-          {/* Microphone Icon */}
-          <button 
-            type="button" 
-            className="bg-contrast-orange text-white p-2 rounded-l-lg flex-shrink-0"
+          <button
+            type="button"
+            onClick={toggleMic}
+            className={`p-2 rounded-lg text-white ${isMicActive ? 'bg-contrast-orange' : 'bg-gray-300'}`}
           >
             <Mic className="w-6 h-6" />
           </button>
+
+          <STTHandler isActive={isMicActive} onTranscription={handleTranscription} />
 
           <textarea
             ref={textareaRef}

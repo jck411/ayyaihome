@@ -1,3 +1,5 @@
+// src/components/StatusBar.js
+
 import React from 'react';
 import ModeToggle from './ModeToggle';
 import { FiMenu } from 'react-icons/fi';
@@ -53,7 +55,9 @@ const StatusBar = ({
 
       {/* Right side with Online status and ModeToggle */}
       <div className="flex items-center space-x-4">
-        <span className="text-lg font-bold text-contrast-orange whitespace-nowrap">Online</span>
+        <span className="text-lg font-bold text-contrast-orange whitespace-nowrap">
+          {status}
+        </span>
         <ModeToggle darkMode={darkMode} toggleDarkMode={toggleDarkMode} />
       </div>
     </div>

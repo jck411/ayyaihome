@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-time Conversation Transcription</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        #transcription {
+            border: 1px solid #ccc;
+            padding: 10px;
+            min-height: 200px;
+            margin-bottom: 20px;
+            overflow-y: auto;
+        }
+        .speaker {
+            font-weight: bold;
+            margin-right: 5px;
+        }
+        .interim {
+            color: gray;
+        }
+        .segment {
+            margin-bottom: 5px;
+        }
+        .info {
+            color: #0066cc;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <h1>Real-time Conversation Transcription</h1>
+    <div id="transcription"></div>
+    <button id="startBtn">Start Transcription</button>
+    <button id="stopBtn" disabled>Stop Transcription</button>
+
+    <script>
+        const transcriptionDiv = document.getElementById('transcription');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        let socket;
+
+        startBtn.addEventListener('click', startTranscription);
+        stopBtn.addEventListener('click', stopTranscription);
+
+        function startTranscription() {
+            socket = new WebSocket('ws://localhost:8000/ws');
+            
+            socket.onopen = function(e) {
+                console.log("WebSocket connection established");
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+            };
+
+            socket.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                updateTranscription(data);
+            };
+
+            socket.onclose = function(event) {
+                console.log("WebSocket connection closed");
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+            };
+        }
+
+        function stopTranscription() {
+            if (socket) {
+                socket.send("stop");
+                socket.close();
+            }
+        }
+
+        function updateTranscription(data) {
+            if (data.type === "info") {
+                const infoDiv = document.createElement('div');
+                infoDiv.className = 'info';
+                infoDiv.textContent = data.message;
+                transcriptionDiv.appendChild(infoDiv);
+            } else {
+                const segmentDiv = document.createElement('div');
+                segmentDiv.className = 'segment';
+                
+                const speakerSpan = document.createElement('span');
+                speakerSpan.className = 'speaker';
+                speakerSpan.textContent = `${data.speaker_id}:`;
+                
+                const textSpan = document.createElement('span');
+                textSpan.textContent = ` ${data.text}`;
+                
+                if (data.type === "transcribing") {
+                    textSpan.className = 'interim';
+                }
+                
+                segmentDiv.appendChild(speakerSpan);
+                segmentDiv.appendChild(textSpan);
+                
+                transcriptionDiv.appendChild(segmentDiv);
+            }
+            
+            // Scroll to bottom
+            transcriptionDiv.scrollTop = transcriptionDiv.scrollHeight;
+        }
+    </script>
+</body>
+</html>

@@ -1,36 +1,13 @@
 import os
 import asyncio
 from fastapi import FastAPI, WebSocket
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 import azure.cognitiveservices.speech as speechsdk
 from dotenv import load_dotenv
-import logging
 
 load_dotenv()
 
 app = FastAPI()
-
-# Configure CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Update according to your frontend's origin
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Include existing routers
-from endpoints.openai import openai_router
-from endpoints.stop import stop_router
-from endpoints.anthropic import anthropic_router
-
-app.include_router(openai_router)
-app.include_router(stop_router)
-app.include_router(anthropic_router)
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 # Configure Azure Speech SDK
 speech_config = speechsdk.SpeechConfig(
@@ -61,12 +38,11 @@ async def process_conversation_transcription(websocket: WebSocket, queue: asynci
             })
 
     def transcribing_cb(evt: speechsdk.SpeechRecognitionEventArgs):
-        if evt.result.text:
-            queue.put_nowait({
-                "type": "transcribing",
-                "text": evt.result.text,
-                "speaker_id": evt.result.speaker_id
-            })
+        queue.put_nowait({
+            "type": "transcribing",
+            "text": evt.result.text,
+            "speaker_id": evt.result.speaker_id
+        })
 
     def session_started_cb(evt: speechsdk.SessionEventArgs):
         queue.put_nowait({
@@ -92,8 +68,7 @@ async def process_conversation_transcription(websocket: WebSocket, queue: asynci
     conversation_transcriber.session_stopped.connect(session_stopped_cb)
     conversation_transcriber.canceled.connect(canceled_cb)
 
-    # Send starting message as JSON
-    await websocket.send_json({"type": "info", "message": "Starting conversation transcription..."})
+    await websocket.send_text("Starting conversation transcription...")
     conversation_transcriber.start_transcribing_async()
 
     try:
@@ -101,34 +76,31 @@ async def process_conversation_transcription(websocket: WebSocket, queue: asynci
             data = await queue.get()
             await websocket.send_json(data)
     except asyncio.CancelledError:
-        # Send stopping message as JSON
-        await websocket.send_json({"type": "info", "message": "Conversation transcription stopped."})
-    finally:
         conversation_transcriber.stop_transcribing_async()
+        await websocket.send_text("Conversation transcription stopped.")
 
-@app.websocket("/ws/stt")
+@app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    logger.info("WebSocket /ws/stt connection accepted")
     queue = asyncio.Queue()
-
+    
     transcription_task = asyncio.create_task(process_conversation_transcription(websocket, queue))
-
+    
     try:
         while True:
             data = await websocket.receive_text()
             if data == "stop":
                 break
-    except Exception as e:
-        logger.error(f"WebSocket error: {e}")
     finally:
         transcription_task.cancel()
         try:
             await transcription_task
         except asyncio.CancelledError:
             pass
-        logger.info("WebSocket /ws/stt connection closed")
 
-if __name__ == '__main__':
+# Serve static files (frontend)
+app.mount("/", StaticFiles(directory="static", html=True), name="static")
+
+if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host='0.0.0.0', port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8000)
