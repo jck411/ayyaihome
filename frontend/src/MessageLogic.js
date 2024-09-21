@@ -1,6 +1,7 @@
-import { useState, useCallback, useRef } from 'react';
-import { generateAIResponse } from './services/openaiService';
-import { generateAnthropicResponse } from './services/anthropicService';
+// /home/jack/ayyaihome/frontend/src/MessageLogic.js
+
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { generateChatResponse } from './services/chatService';
 
 export const useMessageLogic = () => {
   const [messages, setMessages] = useState([]);
@@ -42,22 +43,26 @@ export const useMessageLogic = () => {
     try {
       sendStopSignal();  // Close any existing WebSocket connection
 
-      // Pass `setWebSocket` as the fourth argument
-      if (selectedAPI === 'openai') {
-        await generateAIResponse(context, (content) => {
-          updateMessages(content, userMessage.id);
-        }, selectedAPI, (ws) => { currentWebSocketRef.current = ws; });
-      } else if (selectedAPI === 'anthropic') {
-        await generateAnthropicResponse(context, (content) => {
-          updateMessages(content, userMessage.id);
-        }, selectedAPI, (ws) => { currentWebSocketRef.current = ws; });
-      }
+      // Use the unified chat service
+      await generateChatResponse(context, selectedAPI, (content) => {
+        updateMessages(content, userMessage.id);
+      }, (ws) => { currentWebSocketRef.current = ws; });
 
       setStatus("Online");
       currentWebSocketRef.current = null;  // Clear the WebSocket reference when done
     } catch (error) {
       console.error('Error:', error);
       setStatus("Offline");
+      // Optionally, add an error message to the messages
+      setMessages(prevMessages => [
+        ...prevMessages,
+        {
+          id: prevMessages.length + 1,
+          text: `Error: ${error.message}`,
+          sender: "error",
+          timestamp: new Date().toLocaleTimeString(),
+        }
+      ]);
     }
   };
 
@@ -87,6 +92,12 @@ export const useMessageLogic = () => {
       return updatedMessages;
     });
   };
+
+  // Handle API switch by closing existing WebSocket
+  useEffect(() => {
+    sendStopSignal();
+    // Optionally, initiate a new WebSocket connection if needed
+  }, [selectedAPI, sendStopSignal]);
 
   return {
     messages,

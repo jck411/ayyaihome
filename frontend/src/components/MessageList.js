@@ -1,26 +1,33 @@
+// /home/jack/ayyaihome/frontend/src/components/MessageList.js
+
 import React, { useEffect, useRef } from 'react';
 import CodeBlock from './CodeBlock';
 
 const renderMessageContent = (content) => {
-  const codeBlockRegex = /```(\w+)?\s([\s\S]*?)\s```/g;
+  const codeBlockRegex = /```(\w+)?\n([\s\S]*?)\n```/g;
   const parts = [];
   let lastIndex = 0;
+  let match;
 
-  content.replace(codeBlockRegex, (match, language, code, offset) => {
-    if (lastIndex < offset) {
+  while ((match = codeBlockRegex.exec(content)) !== null) {
+    const [fullMatch, language, code] = match;
+    const index = match.index;
+
+    if (lastIndex < index) {
       parts.push(
         <p key={`text-${lastIndex}`} style={{ whiteSpace: 'pre-wrap', margin: 0 }}>
-          {content.substring(lastIndex, offset)}
+          {content.substring(lastIndex, index)}
         </p>
       );
     }
-    parts.push(<CodeBlock key={offset} code={code.trim()} language={language || 'plaintext'} />);
-    lastIndex = offset + match.length;
-  });
+
+    parts.push(<CodeBlock key={`code-${index}`} code={code.trim()} language={language || 'plaintext'} />);
+    lastIndex = index + fullMatch.length;
+  }
 
   if (lastIndex < content.length) {
     parts.push(
-      <p key={`text-${lastIndex}`} style={{ whiteSpace: 'pre-wrap', margin: 0 }}>
+      <p key={`text-end-${lastIndex}`} style={{ whiteSpace: 'pre-wrap', margin: 0 }}>
         {content.substring(lastIndex)}
       </p>
     );
@@ -49,10 +56,12 @@ const MessageList = ({ messages, sender, onMessageClick }) => {
             key={message.id} 
             id={`${sender === 'assistant' ? `ai-message-${message.id}` : ''}`}
             className={`mb-2 ${sender === 'assistant' ? 'ai-response' : 'user-response'}`}
-            onClick={sender === 'user' ? () => onMessageClick(message.id + 1) : null}
+            onClick={sender === 'user' && onMessageClick ? () => onMessageClick(message.id) : null}
             style={{ cursor: sender === 'user' ? 'pointer' : 'default' }}
           >
-            <span className="font-bold">{message.sender}: </span>
+            <span className="font-bold" style={{ color: sender === 'assistant' ? 'var(--contrast-orange)' : 'inherit' }}>
+              {sender === 'assistant' ? 'Assistant: ' : 'You: '}
+            </span>
             {renderMessageContent(message.text)}
             <span className="block text-xs text-gray-500">{message.timestamp}</span>
           </div>

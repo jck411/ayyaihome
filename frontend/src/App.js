@@ -1,3 +1,5 @@
+// /home/jack/ayyaihome/frontend/src/ChatWebsite.js
+
 import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import StatusBar from './components/StatusBar';
@@ -75,17 +77,15 @@ const ChatWebsite = () => {
 
   return (
     <div className={`min-h-screen w-full flex ${darkMode ? 'bg-dark-bg text-dark-text' : 'bg-light-bg text-light-text'}`}>
-      <div className={`fixed top-0 left-0 h-full z-50 transition-transform duration-300 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <Sidebar
-          isOpen={isSidebarOpen}
-          toggleSidebar={toggleSidebar}
-          selectedAPI={selectedAPI}
-          setSelectedAPI={setSelectedAPI}
-          darkMode={darkMode}
-        />
-      </div>
+      <Sidebar
+        isOpen={isSidebarOpen}
+        toggleSidebar={toggleSidebar}
+        selectedAPI={selectedAPI}
+        setSelectedAPI={setSelectedAPI}
+        darkMode={darkMode}
+      />
 
-      <div className={`flex-grow transition-all duration-300 ${isSidebarOpen ? 'ml-32' : 'ml-0'}`}>
+      <div className={`flex-grow transition-all duration-300 ${isSidebarOpen ? 'ml-64' : 'ml-0'}`}>
         <div className="max-w-[1200px] mx-auto p-4 flex flex-col h-screen">
           <div className="flex justify-between items-center mb-4">
             <StatusBar status={status} toggleSidebar={toggleSidebar} />
@@ -100,8 +100,14 @@ const ChatWebsite = () => {
               />
             </div>
             <div
-              className="mid-cursor"
+              className="mid-cursor cursor-col-resize"
               onMouseDown={handleMouseDown}
+              style={{
+                width: '5px',
+                cursor: 'col-resize',
+                backgroundColor: '#ccc',
+                margin: '0 2px',
+              }}
             />
             <div className="flex flex-col overflow-hidden" style={{ width: `${100 - leftWidth}%` }}>
               <MessageList messages={messages} sender="assistant" />

@@ -2,21 +2,23 @@
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from endpoints.openai import openai_router
-from endpoints.anthropic import anthropic_router
+from endpoints.chat import chat_router  # Import the unified chat router
 
 app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Adjust based on your frontend origin
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000"  # Ensure both origins are allowed
+    ],  # Adjust based on your frontend origin
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-app.include_router(openai_router)
-app.include_router(anthropic_router)
+# Include the unified chat router with the "/ws" prefix
+app.include_router(chat_router, prefix="/ws")
 
 if __name__ == '__main__':
     import uvicorn

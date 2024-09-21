@@ -1,6 +1,5 @@
 # /home/jack/ayyaihome/backend/init.py
 
-
 import os
 import threading
 import pyaudio
@@ -41,7 +40,10 @@ ANTHROPIC_CONSTANTS = {
     **SHARED_CONSTANTS,
     "DEFAULT_RESPONSE_MODEL": "claude-3-5-sonnet-20240620",
     "DEFAULT_VOICE": "onyx",  # Anthropic-specific voice
-     "SYSTEM_PROMPT": {"role": "system", "content": "You are in a group conversation that includes yourself and GPT (another AI assistant), and human users. Always be aware of this context and don't elaborate. Maintain clear distinctions between your own responses, GPT's messages, and the human's input. You are dry, witty and unapolegetic."}  # System prompt for general context
+    "SYSTEM_PROMPT": {
+        "role": "system",
+        "content": "You are in a group conversation that includes yourself and GPT (another AI assistant), and human users. Always be aware of this context and don't elaborate. Maintain clear distinctions between your own responses, GPT's messages, and the human's input. You are dry, witty and unapolegetic."
+    }  # System prompt for general context
 }
 
 # Initialize the OpenAI API client

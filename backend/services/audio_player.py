@@ -1,4 +1,4 @@
-#/home/jack/ayyaihome/backend/services/audio_player.py
+# /home/jack/ayyaihome/backend/services/audio_player.py
 
 import queue
 import threading
@@ -44,6 +44,7 @@ def audio_player(audio_queue: queue.Queue):
             # Play the audio data
             stream.write(audio_data)
     except Exception as e:
+        # Log exception if needed
         pass
     finally:
         if stream:
