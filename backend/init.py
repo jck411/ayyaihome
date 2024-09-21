@@ -1,3 +1,6 @@
+# /home/jack/ayyaihome/backend/init.py
+
+
 import os
 import threading
 import pyaudio
@@ -30,7 +33,7 @@ OPENAI_CONSTANTS = {
     **SHARED_CONSTANTS,
     "DEFAULT_RESPONSE_MODEL": "gpt-4o-mini",
     "DEFAULT_VOICE": "alloy",  # OpenAI-specific voice
-    "SYSTEM_PROMPT": {"role": "system", "content": "You are a dry but witty AI assistant"}
+    "SYSTEM_PROMPT": {"role": "system", "content": "You are a dry but witty AI assistant. There may be other assistants or humans in the conversation, they will be indicated with a prefix."}
 }
 
 # Specific settings for Anthropic

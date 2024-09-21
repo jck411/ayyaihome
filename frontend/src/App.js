@@ -4,7 +4,7 @@ import StatusBar from './components/StatusBar';
 import MessageList from './components/MessageList';
 import MessageInput from './components/MessageInput';
 import ModeToggle from './components/ModeToggle';
-import { useMessageLogic } from './MessageLogic';  // Import message logic
+import { useMessageLogic } from './MessageLogic';
 
 const ChatWebsite = () => {
   const {
@@ -15,8 +15,8 @@ const ChatWebsite = () => {
     sendMessage,
     selectedAPI,
     setSelectedAPI,
-    sendStopSignal,  // Ensure sendStopSignal is destructured here
-  } = useMessageLogic();  // Use the custom hook for messaging logic
+    sendStopSignal,
+  } = useMessageLogic();
 
   const [darkMode, setDarkMode] = useState(true);
   const [isSidebarOpen, setSidebarOpen] = useState(false);
@@ -32,10 +32,10 @@ const ChatWebsite = () => {
 
   useEffect(() => {
     const handleKeyDown = (event) => {
-      if (event.key === "Enter" && event.target.tagName !== "TEXTAREA") {
+      if (event.key === "Escape") {
         event.preventDefault();
-        sendStopSignal();  // Call sendStopSignal when Enter is pressed
-        console.log('Sending stop signal via Enter key');
+        sendStopSignal();
+        console.log('Sending stop signal via Escape key');
       }
     };
 
@@ -44,7 +44,7 @@ const ChatWebsite = () => {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [sendStopSignal, selectedAPI]);  // Ensure dependencies are updated
+  }, [sendStopSignal]);
 
   const toggleDarkMode = () => setDarkMode(!darkMode);
   const toggleSidebar = () => setSidebarOpen(!isSidebarOpen);

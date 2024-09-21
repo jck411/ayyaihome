@@ -1,51 +1,48 @@
-// Define an asynchronous function to generate an OpenAI or Anthropic response
-export const generateAIResponse = async (messages, onUpdate, selectedAPI) => {
-  try {
-    // Format the messages to include 'role' and 'content' fields
-    const formattedMessages = messages.map(msg => {
-      // Check if the message is from the Anthropic assistant using metadata and if we are sending to OpenAI
-      if (selectedAPI === "openai" && msg.sender === "assistant" && msg.metadata?.assistantType === "anthropic") {
-        return {
-          role: "user",  // Change role to 'user' for Anthropic assistant messages
-          content: `Claude: ${msg.text}`  // Prefix the content with 'Claude:'
-        };
-      } else {
-        return {
-          role: msg.sender === "user" ? "user" : "assistant",
-          content: msg.text
-        };
-      }
-    });
+// /home/jack/ayyaihome/frontend/src/services/openaiService.js
 
-    console.log("Formatted messages before sending to OpenAI:", formattedMessages); // Debugging log
+export const generateAIResponse = async (messages, onUpdate, selectedAPI, setWebSocket) => {
+  return new Promise((resolve, reject) => {
+    try {
+      const formattedMessages = messages.map(msg => {
+        if (selectedAPI === "openai" && msg.sender === "assistant" && msg.metadata?.assistantType === "anthropic") {
+          return {
+            role: "user",
+            content: `Claude: ${msg.text}`
+          };
+        } else {
+          return {
+            role: msg.sender === "user" ? "user" : "assistant",
+            content: msg.text
+          };
+        }
+      });
 
-    // Send the formatted messages to the OpenAI backend
-    const response = await fetch('http://localhost:8000/api/openai', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ messages: formattedMessages })
-    });
+      console.log("Formatted messages before sending to OpenAI:", formattedMessages);
 
-    if (!response.ok) {
-      throw new Error('Failed to send request to OpenAI backend');
+      const ws = new WebSocket('ws://localhost:8000/ws/openai');
+      setWebSocket(ws);  // Set the WebSocket reference
+
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ messages: formattedMessages }));
+      };
+
+      ws.onmessage = (event) => {
+        const content = event.data;
+        onUpdate(content);
+      };
+
+      ws.onerror = (error) => {
+        console.error('WebSocket error in generateAIResponse:', error);
+        reject(error);
+      };
+
+      ws.onclose = () => {
+        resolve();
+      };
+
+    } catch (error) {
+      console.error('Error in generateAIResponse:', error);
+      reject(error);
     }
-
-    // Process the streamed response
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder('utf-8');
-    let fullContent = "";
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      const content = decoder.decode(value, { stream: true });
-      fullContent += content;
-      onUpdate(fullContent);  // Update content chunk by chunk
-    }
-  } catch (error) {
-    console.error('Error in generateAIResponse:', error);
-    throw error;
-  }
+  });
 };
