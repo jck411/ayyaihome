@@ -1,17 +1,7 @@
-# /home/jack/ayyaihome/backend/services/audio_player.py
-
+import logging
 import queue
 import threading
-from init import p, stop_event, OPENAI_CONSTANTS  # Use OPENAI_CONSTANTS instead of CONSTANTS
-
-def find_next_phrase_end(text: str) -> int:
-    """
-    Finds the position of the next sentence-ending delimiter in the text
-    starting from a specified minimum length.
-    """
-    sentence_delim_pos = [text.find(d, OPENAI_CONSTANTS["MINIMUM_PHRASE_LENGTH"]) for d in OPENAI_CONSTANTS["DELIMITERS"]]
-    sentence_delim_pos = [pos for pos in sentence_delim_pos if pos != -1]
-    return min(sentence_delim_pos, default=-1)
+from init import p, OPENAI_CONSTANTS  # Remove stop_event import
 
 def audio_player(audio_queue: queue.Queue):
     """
@@ -30,9 +20,12 @@ def audio_player(audio_queue: queue.Queue):
         )
         stream.write(b'\x00' * 2048)  # Pre-fill buffer with silence
 
-        while not stop_event.is_set():
+        while True:
             # Get the next chunk of audio data
-            audio_data = audio_queue.get()
+            try:
+                audio_data = audio_queue.get(timeout=0.1)
+            except queue.Empty:
+                continue
 
             if audio_data is None:
                 break  # Exit if there's no more audio data
@@ -44,15 +37,16 @@ def audio_player(audio_queue: queue.Queue):
             # Play the audio data
             stream.write(audio_data)
     except Exception as e:
-        # Log exception if needed
-        pass
+        logging.exception(f"Error in audio_player: {e}")
     finally:
         if stream:
             stream.stop_stream()  # Stop the audio stream
             stream.close()  # Close the audio stream
+        logging.info("Audio player has been stopped.")
 
 def start_audio_player(audio_queue: queue.Queue):
     """
     Starts the audio player in a separate thread.
     """
     threading.Thread(target=audio_player, args=(audio_queue,), daemon=True).start()
+

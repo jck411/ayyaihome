@@ -1,5 +1,4 @@
-# /home/jack/ayyaihome/backend/endpoints/chat.py
-
+import threading
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 import asyncio
 from init import (
@@ -11,14 +10,35 @@ from init import (
     p  # Assuming p is the PyAudio instance
 )
 from services.tts_service import process_streams
-from services.audio_player import start_audio_player
+from services.audio_player import audio_player, start_audio_player
 import queue
 import logging
+import azure.cognitiveservices.speech as speechsdk
+import os
+from dotenv import load_dotenv
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 chat_router = APIRouter()
+
+# Load environment variables from the .env file
+load_dotenv('/home/jack/ayyaihome/backend/.env')
+
+# Configure Azure STT
+def get_speech_config():
+    # Fetch the keys from environment variables
+    speech_key = os.getenv('AZURE_SPEECH_KEY')
+    service_region = os.getenv('AZURE_REGION')
+
+    if not speech_key or not service_region:
+        raise ValueError("AZURE_SPEECH_KEY and AZURE_REGION must be set in the .env file.")
+
+    # Configure Azure Speech SDK
+    speech_config = speechsdk.SpeechConfig(subscription=speech_key, region=service_region)
+    speech_config.speech_recognition_language = "en-US"
+    
+    return speech_config
 
 def find_next_phrase_end(text: str) -> int:
     """
@@ -43,8 +63,17 @@ async def websocket_chat(websocket: WebSocket):
     # Initialize queues
     phrase_queue = asyncio.Queue()
     audio_sync_queue = queue.Queue()
+
     # Start the audio player in a separate thread with synchronous queue
-    start_audio_player(audio_sync_queue)
+    audio_player_thread = threading.Thread(target=audio_player, args=(audio_sync_queue,), daemon=True)
+    audio_player_thread.start()
+    logging.info("Audio player started.")
+
+    # Start the STT recognizer in a background task
+    stt_task = asyncio.create_task(start_microphone_recognition(websocket))
+
+    # Variable to keep track of the process_streams task
+    process_streams_task = None
 
     try:
         # Expect the first message to specify the API type
@@ -80,13 +109,26 @@ async def websocket_chat(websocket: WebSocket):
                 await websocket.send_json({"error": error_msg})
                 continue
 
+            # Cancel previous process_streams task if it's still running
+            if process_streams_task and not process_streams_task.done():
+                process_streams_task.cancel()
+                try:
+                    await process_streams_task
+                except asyncio.CancelledError:
+                    logging.info("Previous process_streams task cancelled.")
+                # Clear the phrase queue
+                phrase_queue = asyncio.Queue()
+                # Optionally, clear the audio queue
+                with audio_sync_queue.mutex:
+                    audio_sync_queue.queue.clear()
+
             stop_event.set()
             await asyncio.sleep(0.1)
             stop_event.clear()
             logging.info("Stop event toggled.")
 
             # Start processing streams
-            asyncio.create_task(process_streams(phrase_queue, audio_sync_queue, constants))
+            process_streams_task = asyncio.create_task(process_streams(phrase_queue, audio_sync_queue, constants))
             logging.info("Started process_streams task.")
 
             # Call the unified stream_completion
@@ -111,6 +153,16 @@ async def websocket_chat(websocket: WebSocket):
         # Signal the phrase queue and audio queue to stop
         await phrase_queue.put(None)
         audio_sync_queue.put(None)
+        # Cancel the STT task
+        stt_task.cancel()
+        try:
+            await stt_task
+        except asyncio.CancelledError:
+            pass
+        # Wait for the audio player thread to finish
+        audio_player_thread.join()
+        logging.info("Audio player thread has been terminated.")
+
 
 async def stream_completion(
     websocket: WebSocket,
@@ -221,3 +273,35 @@ async def handle_stream(
         error_msg = f"Error in handle_stream: {e}"
         logging.exception(error_msg)
         await websocket.send_text(f"Error: {e}")
+
+# Start microphone recognition and stream STT results to WebSocket
+async def start_microphone_recognition(websocket: WebSocket):
+    speech_config = get_speech_config()
+    audio_config = speechsdk.audio.AudioConfig(use_default_microphone=True)
+
+    speech_recognizer = speechsdk.SpeechRecognizer(speech_config=speech_config, audio_config=audio_config)
+
+    # Event handler for recognized speech
+    def recognized_handler(evt):
+        if evt.result.reason == speechsdk.ResultReason.RecognizedSpeech:
+            # Get the recognized text
+            recognized_text = evt.result.text
+
+            # Log the recognized text to the terminal
+            logging.info(f"Recognized text: {recognized_text}")
+
+            # Send recognized text to the WebSocket
+            asyncio.create_task(websocket.send_text(recognized_text))
+
+    # Connect the event handler to the recognizer
+    speech_recognizer.recognized.connect(recognized_handler)
+
+    # Start continuous recognition
+    speech_recognizer.start_continuous_recognition()
+
+    try:
+        while True:
+            await asyncio.sleep(1)  # Keep the server running to listen for events
+    except asyncio.CancelledError:
+        logging.info("Stopping recognition...")
+        speech_recognizer.stop_continuous_recognition()
