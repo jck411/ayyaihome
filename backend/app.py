@@ -1,8 +1,9 @@
-# /home/jack/ayyaihome/backend/app.py
+#/home/jack/ayyaihome/backend/app.py
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from endpoints.chat import chat_router  # Import the unified chat router
+from services import stt_service  # Import the STT service
 
 app = FastAPI()
 
@@ -19,6 +20,8 @@ app.add_middleware(
 
 # Include the unified chat router with the "/ws" prefix
 app.include_router(chat_router, prefix="/ws")
+
+# Now you have imported stt_service, but its actual usage will likely happen in chat_router.
 
 if __name__ == '__main__':
     import uvicorn
