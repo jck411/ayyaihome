@@ -10,15 +10,13 @@ export const generateAIResponse = async (messages, onUpdate, selectedAPI, ttsEna
           role: "user",  // Role is 'user'
           content: `${userPrefix}${msg.text}`  // Prefix content with user name, or leave as is for Guest
         };
-      } else if (msg.sender === "assistant") {
-        // Check if the assistant message is from Anthropic, and prepend "Claude:" if so
-        const assistantPrefix = msg.metadata?.assistantType === "anthropic" ? "Claude: " : "";
+      } else {
+        // Assistant messages are left unchanged
         return {
-          role: "assistant",  // Role is 'assistant'
-          content: `${assistantPrefix}${msg.text}`  // Prepend "Claude:" if it's from Anthropic
+          role: "assistant",
+          content: msg.text
         };
       }
-      return msg;  // Return the message as is if it's not from user or assistant
     });
 
     console.log("Formatted messages before sending to OpenAI:", formattedMessages); // Debugging log

@@ -1,4 +1,3 @@
-//home/jack/ayyaihome/frontend/src/App.js
 import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import StatusBar from './components/StatusBar';
@@ -17,14 +16,15 @@ const App = () => {
     setSelectedAPI,
     sendStopSignal,
     setLoggedInUser,
-    ttsEnabled,           // Get ttsEnabled state
-    setTtsEnabled         // Get setTtsEnabled function
+    ttsEnabled,           
+    setTtsEnabled         
   } = useMessageLogic();
 
   const [darkMode, setDarkMode] = useState(true);
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [leftWidth, setLeftWidth] = useState(30); 
   const [loggedInUser, setLoggedInUserState] = useState(null);
+  const [isMicActive, setIsMicActive] = useState(false); // New state to track mic activity
 
   const onLogin = (user) => {
     setLoggedInUserState(user);
@@ -92,15 +92,15 @@ const App = () => {
           selectedAPI={selectedAPI}
           setSelectedAPI={setSelectedAPI}
           darkMode={darkMode}
-          ttsEnabled={ttsEnabled}           // Pass ttsEnabled to Sidebar
-          setTtsEnabled={setTtsEnabled}     // Pass setTtsEnabled to Sidebar
+          ttsEnabled={ttsEnabled}
+          setTtsEnabled={setTtsEnabled}
         />
       </div>
 
       {/* Header */}
       <div className="fixed top-0 left-0 right-0 z-40">
         <StatusBar 
-          status={status} 
+          status={isMicActive ? "Listening..." : status} // Show "Listening" when mic is active
           onLogin={onLogin} 
           loggedInUser={loggedInUser} 
           darkMode={darkMode} 
@@ -111,9 +111,7 @@ const App = () => {
 
       {/* Main content area */}
       <div className={`flex flex-col h-screen pt-16 pb-16`}>
-        {/* Centered container with max-width */}
         <div className="mx-auto main-content" style={{ maxWidth: '950px', width: '100%' }}>
-          {/* Chat area */}
           <div className={`flex flex-grow overflow-hidden transition-all duration-300`}>
             <div className="flex flex-col message-list" style={{ width: `${leftWidth}%` }}>
               <MessageList
@@ -138,7 +136,13 @@ const App = () => {
 
       {/* Footer */}
       <div className="fixed bottom-0 left-0 right-0 z-40">
-        <MessageInput input={input} setInput={setInput} sendMessage={sendMessage} darkMode={darkMode} />
+        <MessageInput 
+          input={input} 
+          setInput={setInput} 
+          sendMessage={sendMessage} 
+          darkMode={darkMode}
+          setIsMicActive={setIsMicActive} // Pass the setIsMicActive function to MessageInput
+        />
       </div>
     </div>
   );

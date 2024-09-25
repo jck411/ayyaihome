@@ -1,3 +1,5 @@
+#/home/jack/ayyaihome/backend/app.py
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from endpoints.openai import openai_router

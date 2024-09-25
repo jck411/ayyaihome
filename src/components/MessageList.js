@@ -1,4 +1,5 @@
-//home/jack/ayyaihome/frontend/src/components/MessageList.js
+// src/components/MessageList.js
+
 import React, { useEffect, useRef } from 'react';
 import CodeBlock from './CodeBlock';
 
