@@ -1,5 +1,3 @@
-// /home/jack/ayyaihome/frontend/src/MessageLogic.js
-
 import { useState, useCallback } from 'react';
 import { generateAIResponse } from './services/openaiService';
 import { generateAnthropicResponse } from './services/anthropicService';
@@ -108,4 +106,3 @@ export const useMessageLogic = () => {
     setTtsEnabled         // Expose function to toggle TTS
   };
 };
-

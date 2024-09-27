@@ -16,19 +16,18 @@ const App = () => {
     setSelectedAPI,
     sendStopSignal,
     setLoggedInUser,
-    ttsEnabled,           
-    setTtsEnabled         
-  } = useMessageLogic();
+    ttsEnabled,
+    setTtsEnabled
+  } = useMessageLogic();  // All logic comes from useMessageLogic
 
   const [darkMode, setDarkMode] = useState(true);
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [leftWidth, setLeftWidth] = useState(30); 
   const [loggedInUser, setLoggedInUserState] = useState(null);
-  const [isMicActive, setIsMicActive] = useState(false); // New state to track mic activity
 
   const onLogin = (user) => {
     setLoggedInUserState(user);
-    setLoggedInUser(user);
+    setLoggedInUser(user);  // Set logged in user from logic
   };
 
   const toggleDarkMode = () => setDarkMode(!darkMode);
@@ -46,7 +45,7 @@ const App = () => {
     const handleKeyDown = (event) => {
       if (event.key === "Enter" && event.target.tagName !== "TEXTAREA") {
         event.preventDefault();
-        sendStopSignal();
+        sendStopSignal();  // Call stop signal from message logic
         console.log('Sending stop signal via Enter key');
       }
     };
@@ -56,7 +55,7 @@ const App = () => {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [sendStopSignal, selectedAPI]);
+  }, [sendStopSignal]);
 
   const handleDrag = (e) => {
     const containerOffset = (window.innerWidth - 950) / 2;
@@ -100,7 +99,7 @@ const App = () => {
       {/* Header */}
       <div className="fixed top-0 left-0 right-0 z-40">
         <StatusBar 
-          status={isMicActive ? "Listening..." : status} // Show "Listening" when mic is active
+          status={status} 
           onLogin={onLogin} 
           loggedInUser={loggedInUser} 
           darkMode={darkMode} 
@@ -112,10 +111,11 @@ const App = () => {
       {/* Main content area */}
       <div className={`flex flex-col h-screen pt-16 pb-16`}>
         <div className="mx-auto main-content" style={{ maxWidth: '950px', width: '100%' }}>
+          {/* Chat area */}
           <div className={`flex flex-grow overflow-hidden transition-all duration-300`}>
             <div className="flex flex-col message-list" style={{ width: `${leftWidth}%` }}>
               <MessageList
-                messages={messages}
+                messages={messages}   // Messages from useMessageLogic
                 sender="user"
                 onMessageClick={scrollToAIMessage}
               />
@@ -140,8 +140,7 @@ const App = () => {
           input={input} 
           setInput={setInput} 
           sendMessage={sendMessage} 
-          darkMode={darkMode}
-          setIsMicActive={setIsMicActive} // Pass the setIsMicActive function to MessageInput
+          darkMode={darkMode} 
         />
       </div>
     </div>

@@ -1,3 +1,5 @@
+#/home/jack/ayyaihome/backend/endpoints/stop.py
+
 from fastapi import APIRouter  # Import FastAPI's APIRouter to define a route for the stop event
 from init import stop_event  # Import stop_event from the init module, used to signal stopping the TTS service
 

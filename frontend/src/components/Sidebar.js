@@ -1,3 +1,5 @@
+//home/jack/ayyaihome/frontend/src/components/Sidebar.js
+
 import React from 'react';
 
 const Sidebar = ({ isOpen, selectedAPI, setSelectedAPI, darkMode, ttsEnabled, setTtsEnabled }) => {
