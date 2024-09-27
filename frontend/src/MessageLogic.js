@@ -1,5 +1,3 @@
-// Path: frontend/src/MessageLogic.js
-
 import { useState, useCallback } from 'react';
 import { generateAIResponse } from './services/openaiService';
 import { generateAnthropicResponse } from './services/anthropicService';
@@ -29,16 +27,15 @@ export const useMessageLogic = () => {
   }, []);
 
   // Function to send a message and handle the API response
-  const sendMessage = async (messageText = null) => {
-    const textToSend = messageText !== null ? messageText : input;
-    if (!textToSend.trim()) return;
+  const sendMessage = async () => {
+    if (!input.trim()) return;
 
     const timestamp = new Date().toLocaleTimeString();
     
     // Append the logged-in user's name to the message text and add metadata
     const userMessage = { 
       id: messages.length + 1, 
-      text: textToSend,
+      text: input,
       sender: "user", 
       timestamp,
       metadata: { user: loggedInUser || "Anonymous" }  // Only add metadata for the logged-in user
