@@ -1,3 +1,4 @@
+///home/jack/ayyaihome/frontend/src/components/MessageInput.js
 import React, { useRef, useState } from 'react';
 import { Send, Mic, MicOff } from 'lucide-react';
 import useSpeechToText from '../hooks/useSpeechToText';

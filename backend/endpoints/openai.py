@@ -1,25 +1,27 @@
-#/home/jack/ayyaihome/backend/endpoints/openai.py
+# /home/jack/ayyaihome/backend/endpoints/openai.py
 
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 import asyncio
 import queue
-from init import stop_event, OPENAI_CONSTANTS, aclient
+from threading import Event
+from init import OPENAI_CONSTANTS, aclient
 from services.tts_service import process_streams
 from services.audio_player import find_next_phrase_end
+import uuid
+from stop_events import stop_events  # Import stop_events from the new module
 
-# Define the router for OpenAI-related endpoints
 openai_router = APIRouter()
 
 @openai_router.post("/api/openai")
 async def openai_stream(request: Request):
     """
     Handles POST requests to the "/api/openai" endpoint.
-    Processes user input, sends it to the OpenAI API for response generation, and streams the output back.
     """
-    stop_event.set()
-    await asyncio.sleep(0.1)
-    stop_event.clear()
+    # Generate a unique request ID
+    request_id = str(uuid.uuid4())
+    stop_event = Event()
+    stop_events[request_id] = stop_event
 
     try:
         # Parse incoming data
@@ -36,19 +38,23 @@ async def openai_stream(request: Request):
             audio_queue = queue.Queue()  # Synchronous queue for audio processing
 
             # Use OpenAI TTS service with OpenAI-specific constants
-            asyncio.create_task(process_streams(phrase_queue, audio_queue, OPENAI_CONSTANTS))
+            asyncio.create_task(process_streams(phrase_queue, audio_queue, OPENAI_CONSTANTS, stop_event))
 
         # Return a streaming response and pass the phrase queue to handle TTS
-        return StreamingResponse(stream_completion(messages, phrase_queue), media_type='text/plain')
+        response = StreamingResponse(
+            stream_completion(messages, phrase_queue, stop_event, request_id),
+            media_type='text/plain'
+        )
+        # Include the request ID in the response headers
+        response.headers['X-Request-ID'] = request_id
+        return response
 
     except Exception as e:
         return {"error": f"Unexpected error: {str(e)}"}
 
-async def stream_completion(messages: list, phrase_queue: asyncio.Queue, model: str = OPENAI_CONSTANTS["DEFAULT_RESPONSE_MODEL"]):
+async def stream_completion(messages: list, phrase_queue: asyncio.Queue, stop_event: Event, request_id: str, model: str = OPENAI_CONSTANTS["DEFAULT_RESPONSE_MODEL"]):
     """
     Streams the response from the OpenAI API.
-    Processes each chunk of the response, adds it to the phrase queue for text-to-speech conversion if TTS is enabled,
-    and streams the content back to the client.
     """
     try:
         # Send the request to OpenAI API
@@ -78,10 +84,8 @@ async def stream_completion(messages: list, phrase_queue: asyncio.Queue, model: 
                 yield content  # Stream content back to the client
                 working_string += content
 
-                # Check for code blocks and regular text
+                # Process phrases
                 while True:
-                    code_block_start = working_string.find("```")
-
                     if in_code_block:
                         code_block_end = working_string.find("```", 3)
                         if code_block_end != -1:
@@ -92,6 +96,7 @@ async def stream_completion(messages: list, phrase_queue: asyncio.Queue, model: 
                         else:
                             break
                     else:
+                        code_block_start = working_string.find("```")
                         if code_block_start != -1:
                             phrase, working_string = working_string[:code_block_start], working_string[code_block_start:]
                             if phrase.strip() and phrase_queue:
@@ -102,21 +107,45 @@ async def stream_completion(messages: list, phrase_queue: asyncio.Queue, model: 
                             if next_phrase_end == -1:
                                 break
                             phrase, working_string = working_string[:next_phrase_end + 1].strip(), working_string[next_phrase_end + 1:]
-                            if phrase_queue:
+                            if phrase_queue and phrase:
                                 await phrase_queue.put(phrase)
 
-        # Final text after streaming
-        if working_string.strip() and not in_code_block and phrase_queue:
-            await phrase_queue.put(working_string.strip())
+        # Process any remaining text after streaming ends
+        while True:
+            if in_code_block:
+                code_block_end = working_string.find("```", 3)
+                if code_block_end != -1:
+                    working_string = working_string[code_block_end + 3:]
+                    if phrase_queue:
+                        await phrase_queue.put("Code presented on screen")
+                    in_code_block = False
+                else:
+                    break
+            else:
+                code_block_start = working_string.find("```")
+                if code_block_start != -1:
+                    phrase, working_string = working_string[:code_block_start], working_string[code_block_start:]
+                    if phrase.strip() and phrase_queue:
+                        await phrase_queue.put(phrase.strip())
+                    in_code_block = True
+                else:
+                    if working_string.strip() and phrase_queue:
+                        await phrase_queue.put(working_string.strip())
+                        working_string = ''
+                    break
 
         # End of TTS
         if phrase_queue:
             await phrase_queue.put(None)
 
-    except asyncio.TimeoutError:
-        if phrase_queue:
-            await phrase_queue.put(None)
+        # Remove stop_event after processing
+        if request_id in stop_events:
+            del stop_events[request_id]
+
     except Exception as e:
         if phrase_queue:
             await phrase_queue.put(None)
+        # Remove stop_event in case of error
+        if request_id in stop_events:
+            del stop_events[request_id]
         yield f"Error: {e}"

@@ -1,18 +1,20 @@
-#/home/jack/ayyaihome/backend/endpoints/stop.py
+# /home/jack/ayyaihome/backend/endpoints/stop.py
 
-from fastapi import APIRouter  # Import FastAPI's APIRouter to define a route for the stop event
-from init import stop_event  # Import stop_event from the init module, used to signal stopping the TTS service
+from fastapi import APIRouter, Request
+from stop_events import stop_events  # Import stop_events from the new module
 
-# Create a new router for the stop endpoint
 stop_router = APIRouter()
 
-# Define an endpoint to handle POST requests to "/api/stop"
 @stop_router.post("/api/stop")
-async def stop_tts():
+async def stop_tts(request: Request):
     """
-    This function handles requests to stop the TTS (Text-to-Speech) service.
-    When a POST request is sent to this endpoint, it triggers the stop_event,
-    which signals other processes to stop their execution.
+    Handles requests to stop TTS processing for a specific request.
     """
-    stop_event.set()  # Set the stop_event, signaling to other components to stop (e.g., halting TTS or audio playback)
-    return {"status": "Stopping"}  # Return a JSON response indicating that the stop command was issued
+    data = await request.json()
+    request_id = data.get('request_id')
+    if request_id and request_id in stop_events:
+        stop_events[request_id].set()
+        del stop_events[request_id]  # Remove the stop event after setting it
+        return {"status": f"Stopping request {request_id}"}
+    else:
+        return {"error": "Invalid request ID"}

@@ -1,9 +1,12 @@
+// /home/jack/ayyaihome/frontend/src/App.js
+
 import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import StatusBar from './components/StatusBar';
 import MessageList from './components/MessageList';
 import MessageInput from './components/MessageInput';
 import { useMessageLogic } from './MessageLogic';
+import useAudioPlayer from './hooks/useAudioPlayer'; // Import the useAudioPlayer hook
 
 const App = () => {
   const {
@@ -24,6 +27,9 @@ const App = () => {
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [leftWidth, setLeftWidth] = useState(30); 
   const [loggedInUser, setLoggedInUserState] = useState(null);
+
+  // Initialize the audio player
+  useAudioPlayer(); 
 
   const onLogin = (user) => {
     setLoggedInUserState(user);

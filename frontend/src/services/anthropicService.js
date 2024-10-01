@@ -1,3 +1,5 @@
+// /home/jack/ayyaihome/frontend/src/services/anthropicService.js
+
 // Define an asynchronous function to generate an Anthropic AI response
 export const generateAnthropicResponse = async (messages, onUpdate, ttsEnabled) => {
   try {
@@ -36,6 +38,11 @@ export const generateAnthropicResponse = async (messages, onUpdate, ttsEnabled) 
       body: JSON.stringify({ messages: formattedMessages, ttsEnabled })  // Include ttsEnabled in the request body
     });
 
+    // Wait until headers are available
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const requestId = response.headers.get('X-Request-ID');
+
     if (!response.ok) {
       throw new Error('Failed to send request to Anthropic backend');
     }
@@ -45,12 +52,23 @@ export const generateAnthropicResponse = async (messages, onUpdate, ttsEnabled) 
     const decoder = new TextDecoder('utf-8');
     let fullContent = "";
 
+    let isFirstChunk = true;
+
     while (true) {
       const { done, value } = await reader.read();
-      if (done) break;
+      if (done) {
+        onUpdate(fullContent, true);  // Indicate that the response is complete
+        break;
+      }
       const content = decoder.decode(value, { stream: true });
       fullContent += content;
-      onUpdate(fullContent);  // Update content chunk by chunk
+
+      if (isFirstChunk) {
+        isFirstChunk = false;
+        onUpdate(fullContent, false, requestId);  // Pass requestId on the first update
+      } else {
+        onUpdate(fullContent);  // Subsequent updates
+      }
     }
   } catch (error) {
     console.error('Error in generateAnthropicResponse:', error);

@@ -2,73 +2,47 @@
 
 import asyncio
 import logging
-from init import stop_event, aclient, SHARED_CONSTANTS
-from services.audio_player import start_audio_player
 import queue
-from pydub import AudioSegment
-from pydub.utils import which
-import io
-import opuslib
+from threading import Event
+from init import aclient, SHARED_CONSTANTS, connection_manager, pyaudio
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,  # Set to DEBUG for more granular logs
+    level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
-# Ensure pydub can find ffmpeg
-AudioSegment.converter = which("ffmpeg")
-if AudioSegment.converter is None:
-    logger.error("ffmpeg not found. Please ensure ffmpeg is installed and in your PATH.")
-    raise EnvironmentError("ffmpeg not found. Please install ffmpeg and add it to your PATH.")
+async def process_streams(phrase_queue: asyncio.Queue, audio_queue: queue.Queue, tts_constants, stop_event: Event):
+    if SHARED_CONSTANTS.get("FRONTEND_PLAYBACK", False):
+        # Frontend playback via WebSocket
+        audio_sender_task = asyncio.create_task(audio_sender(audio_queue, stop_event))
+        await text_to_speech_processor(phrase_queue, audio_queue, tts_constants, stop_event)
+        audio_queue.put(None)
+        await audio_sender_task
+    else:
+        # Backend audio playback
+        audio_player_task = asyncio.create_task(audio_player(audio_queue, tts_constants, stop_event))
+        await text_to_speech_processor(phrase_queue, audio_queue, tts_constants, stop_event)
+        audio_queue.put(None)
+        await audio_player_task
 
-async def decode_opus(opus_data: bytes) -> bytes:
-    """
-    Decodes raw Opus audio data to PCM using opuslib.
-    """
-    try:
-        # Initialize the Opus decoder with sample rate and channels
-        decoder = opuslib.Decoder(SHARED_CONSTANTS["RATE"], SHARED_CONSTANTS["CHANNELS"])
-        # Decode the entire Opus data
-        pcm_data = decoder.decode(opus_data, frame_size=960, decode_fec=False)  # 20ms at 48kHz
-        return pcm_data
-    except opuslib.OpusError as e:
-        logger.error(f"opuslib decoding failed: {e}")
-        raise RuntimeError(f"opuslib decoding failed: {e}")
-    except Exception as e:
-        logger.error(f"Unexpected error during Opus decoding: {e}")
-        raise RuntimeError(f"Unexpected error during Opus decoding: {e}")
-
-async def enqueue_phrase(phrase_queue: asyncio.Queue, text: str):
-    """
-    Enqueues a phrase for TTS processing.
-    """
-    await phrase_queue.put(text)
-    logger.info(f"Enqueued phrase with text: '{text}'")
-
-async def text_to_speech_processor(phrase_queue: asyncio.Queue, audio_queue: queue.Queue, tts_constants):
-    """
-    Processes phrases into speech using OpenAI's TTS model.
-    Streams audio chunks to the audio queue for playback.
-    """
+async def text_to_speech_processor(phrase_queue: asyncio.Queue, audio_queue: queue.Queue, tts_constants, stop_event: Event):
     try:
         while not stop_event.is_set():
             phrase = await phrase_queue.get()
-
             if phrase is None:
-                audio_queue.put(None)
                 logger.info("Received stop signal. Exiting TTS processor.")
                 return
-
             try:
-                # Send the phrase to OpenAI's TTS API with appropriate constants
+                logger.info(f"Processing phrase: {phrase}")
+                # Process one phrase at a time
                 async with aclient.audio.speech.with_streaming_response.create(
                     model=tts_constants["DEFAULT_TTS_MODEL"],
                     voice=tts_constants["DEFAULT_VOICE"],
                     input=phrase,
                     speed=tts_constants["TTS_SPEED"],
-                    response_format=tts_constants["RESPONSE_FORMAT"]  # Use the configurable format
+                    response_format=tts_constants["RESPONSE_FORMAT"]
                 ) as response:
                     audio_data = b""
                     async for audio_chunk in response.iter_bytes(tts_constants["TTS_CHUNK_SIZE"]):
@@ -76,50 +50,58 @@ async def text_to_speech_processor(phrase_queue: asyncio.Queue, audio_queue: que
                             logger.info("Stop event detected. Terminating TTS processing.")
                             return
                         audio_data += audio_chunk
-
-                    # Handle decoding for compressed formats
-                    if tts_constants["RESPONSE_FORMAT"] in ["opus", "mp3", "aac"]:
-                        try:
-                            # Use pydub's AudioSegment for decoding
-                            format_map = {
-                                "opus": "ogg",
-                                "mp3": "mp3",
-                                "aac": "aac"
-                            }
-                            audio_format = format_map.get(tts_constants["RESPONSE_FORMAT"], "pcm")
-                            logger.debug(f"Decoding {tts_constants['RESPONSE_FORMAT'].upper()} format using pydub.")
-                            audio_segment = AudioSegment.from_file(io.BytesIO(audio_data), format=audio_format)
-                            raw_data = audio_segment.raw_data
-
-                            # Enqueue the raw PCM data for playback
-                            audio_queue.put(raw_data)
-                            logger.info(f"Successfully decoded and enqueued audio for format {tts_constants['RESPONSE_FORMAT']}.")
-                        except Exception as decode_error:
-                            logger.error(f"Decoding failed for format {tts_constants['RESPONSE_FORMAT']}: {decode_error}")
-                            audio_queue.put(None)
-                    else:
-                        # For PCM formats, stream directly
-                        audio_queue.put(audio_data)
-                        logger.info("Enqueued PCM audio data directly for playback.")
-
-                # Insert a short pause between phrases (optional)
-                audio_queue.put(b'\x00' * 2400)
-                logger.debug("Inserted a short pause between phrases.")
+                    # Enqueue the audio data
+                    audio_queue.put(audio_data)
+                    logger.info(f"Enqueued audio data for phrase.")
             except Exception as tts_error:
                 logger.error(f"TTS processing failed with error: {tts_error}")
                 audio_queue.put(None)
-
+                break  # Exit on TTS error
     except Exception as e:
         logger.error(f"Error in text_to_speech_processor: {e}")
         audio_queue.put(None)
-             
 
+async def audio_sender(audio_queue: queue.Queue, stop_event: Event):
+    try:
+        logger.info("Audio sender started.")
+        while not stop_event.is_set():
+            audio_data = await asyncio.get_event_loop().run_in_executor(None, audio_queue.get)
+            if audio_data is None:
+                logger.info("Audio sender ended.")
+                break
+            if not audio_data:
+                # Skip sending empty audio data
+                continue
+            if connection_manager.active_connection:
+                await connection_manager.send_audio(audio_data)
+            else:
+                logger.warning("No active WebSocket connection to send audio.")
+    except Exception as e:
+        logger.error(f"Error in audio_sender: {e}")
 
-
-async def process_streams(phrase_queue: asyncio.Queue, audio_queue: queue.Queue, tts_constants):
-    """
-    Manages the processing of text-to-speech and audio playback using OpenAI TTS.
-    """
-    tts_task = asyncio.create_task(text_to_speech_processor(phrase_queue, audio_queue, tts_constants))
-    start_audio_player(audio_queue)
-    await tts_task
+async def audio_player(audio_queue: queue.Queue, tts_constants, stop_event: Event):
+    try:
+        logger.info("Backend audio player started.")
+        # Initialize PyAudio
+        p = pyaudio.PyAudio()
+        # Configure audio stream based on RESPONSE_FORMAT
+        stream = p.open(format=pyaudio.paInt16,
+                        channels=tts_constants["CHANNELS"],
+                        rate=tts_constants["RATE"],
+                        output=True)
+        while not stop_event.is_set():
+            audio_data = await asyncio.get_event_loop().run_in_executor(None, audio_queue.get)
+            if audio_data is None:
+                logger.info("Audio player ended.")
+                break
+            if not audio_data:
+                # Skip empty audio data
+                continue
+            # Play the audio data
+            stream.write(audio_data)
+        # Clean up
+        stream.stop_stream()
+        stream.close()
+        p.terminate()
+    except Exception as e:
+        logger.error(f"Error in audio_player: {e}")

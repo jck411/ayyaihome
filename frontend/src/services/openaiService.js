@@ -1,5 +1,7 @@
-// Define an asynchronous function to generate an OpenAI or Anthropic response
-export const generateAIResponse = async (messages, onUpdate, selectedAPI, ttsEnabled) => {
+// /home/jack/ayyaihome/frontend/src/services/openaiService.js
+
+// Define an asynchronous function to generate an OpenAI response
+export const generateAIResponse = async (messages, onUpdate, ttsEnabled) => {
   try {
     // Format the messages to include 'role' and 'content' fields
     const formattedMessages = messages.map(msg => {
@@ -32,6 +34,11 @@ export const generateAIResponse = async (messages, onUpdate, selectedAPI, ttsEna
       body: JSON.stringify({ messages: formattedMessages, ttsEnabled })  // Include ttsEnabled in the request body
     });
 
+    // Wait until headers are available
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const requestId = response.headers.get('X-Request-ID');
+
     if (!response.ok) {
       throw new Error('Failed to send request to OpenAI backend');
     }
@@ -41,12 +48,23 @@ export const generateAIResponse = async (messages, onUpdate, selectedAPI, ttsEna
     const decoder = new TextDecoder('utf-8');
     let fullContent = "";
 
+    let isFirstChunk = true;
+
     while (true) {
       const { done, value } = await reader.read();
-      if (done) break;
+      if (done) {
+        onUpdate(fullContent, true);  // Indicate that the response is complete
+        break;
+      }
       const content = decoder.decode(value, { stream: true });
       fullContent += content;
-      onUpdate(fullContent);  // Update content chunk by chunk
+
+      if (isFirstChunk) {
+        isFirstChunk = false;
+        onUpdate(fullContent, false, requestId);  // Pass requestId on the first update
+      } else {
+        onUpdate(fullContent);  // Subsequent updates
+      }
     }
   } catch (error) {
     console.error('Error in generateAIResponse:', error);

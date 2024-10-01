@@ -1,3 +1,5 @@
+// /home/jack/ayyaihome/frontend/src/MessageLogic.js
+
 import { useState, useCallback } from 'react';
 import { generateAIResponse } from './services/openaiService';
 import { generateAnthropicResponse } from './services/anthropicService';
@@ -10,28 +12,37 @@ export const useMessageLogic = () => {
   const [loggedInUser, setLoggedInUser] = useState('guest');  // State to track the logged-in user
   const [ttsEnabled, setTtsEnabled] = useState(true);  // New state to track TTS toggle
 
+  const [currentRequestId, setCurrentRequestId] = useState(null);  // Store the current request ID
+
   const sendStopSignal = useCallback(async () => {
     try {
       console.log('Sending stop signal...');
+      if (!currentRequestId) {
+        console.error('No current request ID to stop.');
+        return;
+      }
       const response = await fetch('http://localhost:8000/api/stop', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ request_id: currentRequestId }),
       });
       if (!response.ok) {
         console.error('Failed to send stop signal');
       } else {
         console.log('Stop signal sent successfully');
+        setCurrentRequestId(null);  // Clear the current request ID
       }
     } catch (error) {
       console.error('Error sending stop signal:', error);
     }
-  }, []);
+  }, [currentRequestId]);
 
   // Function to send a message and handle the API response
   const sendMessage = async () => {
     if (!input.trim()) return;
 
     const timestamp = new Date().toLocaleTimeString();
-    
+
     // Append the logged-in user's name to the message text and add metadata
     const userMessage = { 
       id: messages.length + 1, 
@@ -49,14 +60,26 @@ export const useMessageLogic = () => {
     setStatus("Listening...");
 
     try {
-      await sendStopSignal();
+      await sendStopSignal();  // Stop any previous request
 
       if (selectedAPI === 'openai') {
-        await generateAIResponse(context, (content, isComplete) => {
+        await generateAIResponse(context, (content, isComplete = false, requestId = null) => {
+          if (requestId) {
+            setCurrentRequestId(requestId);  // Store the request ID
+          }
+          if (isComplete) {
+            setCurrentRequestId(null);  // Clear the request ID when complete
+          }
           updateMessages(content, userMessage.id, isComplete);
-        }, selectedAPI, ttsEnabled);  // Pass ttsEnabled to OpenAI service
+        }, ttsEnabled);  // Pass ttsEnabled to OpenAI service
       } else if (selectedAPI === 'anthropic') {
-        await generateAnthropicResponse(context, (content, isComplete) => {
+        await generateAnthropicResponse(context, (content, isComplete = false, requestId = null) => {
+          if (requestId) {
+            setCurrentRequestId(requestId);  // Store the request ID
+          }
+          if (isComplete) {
+            setCurrentRequestId(null);  // Clear the request ID when complete
+          }
           updateMessages(content, userMessage.id, isComplete);
         }, ttsEnabled);  // Pass ttsEnabled to Anthropic service
       }
