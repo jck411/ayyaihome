@@ -32,7 +32,7 @@ def audio_player(audio_queue: queue.Queue):
     try:
         # Open the PyAudio stream for playback
         stream = p.open(
-            format=OPENAI_CONSTANTS["AUDIO_FORMAT"],
+            format=OPENAI_CONSTANTS["AUDIO_FORMAT"],  # Use configurable audio format
             channels=OPENAI_CONSTANTS["CHANNELS"],
             rate=OPENAI_CONSTANTS["RATE"],
             output=True,
