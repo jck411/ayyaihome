@@ -1,42 +1,57 @@
-///home/jack/ayyaihome/frontend/src/components/MessageInput.js
-import React, { useRef, useState } from 'react';
+// src/components/MessageInput.js
+
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { Send, Mic, MicOff } from 'lucide-react';
 import useSpeechToText from '../hooks/useSpeechToText';
 
 const MessageInput = ({ input, setInput, sendMessage, darkMode }) => {
-  const [isListening, setIsListening] = useState(false);
+  const [sendOnInput, setSendOnInput] = useState(false); // Flag to trigger sending
   const textareaRef = useRef(null);
+  const audioRef = useRef(null); // Reference for the audio element
 
-  // Callback when speech is recognized, updating the input field only
-  const handleResult = (transcript) => {
+  // Callback when speech is recognized
+  const handleResult = useCallback((transcript) => {
     if (transcript !== "Speech not recognized.") {
-      setInput(transcript);  // Update the input box with the recognized speech
+      setInput(transcript);           // Update the input box with the recognized speech
+      setSendOnInput(true);           // Set flag to send the message
+      if (audioRef.current) {
+        audioRef.current.play();       // Play the sound when speech is recognized
+      }
     } else {
       console.log("Speech was not recognized.");
     }
-  };
+  }, [setInput]);
 
-  // Handle STT errors
-  const handleError = (error) => {
+  // Callback when an error occurs in STT
+  const handleError = useCallback((error) => {
     console.error('Speech recognition error:', error);
-    setIsListening(false);
-  };
+    // Optionally, you can notify the user about the error here
+  }, []);
 
-  // Initialize Speech-to-Text hook
-  const { startListening, stopListening } = useSpeechToText(
-    handleResult,   // Success callback when STT completes
-    handleError,    // Error callback
-    () => setIsListening(true),  // When STT starts
-    () => setIsListening(false)  // When STT stops
-  );
+  // Use the custom hook for Speech-to-Text
+  const { isListening, startListening, stopListening } = useSpeechToText(handleResult, handleError);
+
+  // useEffect to send message when sendOnInput is true
+  useEffect(() => {
+    if (sendOnInput && input.trim()) {
+      sendMessage();                     // Send the message using the current input state
+      setInput('');                      // Clear input field after sending
+      if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto'; // Reset height after sending
+      }
+      setSendOnInput(false);             // Reset the send flag
+    }
+  }, [sendOnInput, input, sendMessage, setInput]);
 
   // Handle manual message sending via the input field
   const handleSendMessage = (e) => {
     e.preventDefault();
     if (input.trim()) {
-      sendMessage();  // Uses the current input state from useMessageLogic
-      setInput('');  // Clear input field after sending
-      textareaRef.current.style.height = 'auto';  // Reset height after sending
+      sendMessage();                     // Uses the current input state from useMessageLogic
+      setInput('');                      // Clear input field after sending
+      if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto'; // Reset height after sending
+      }
     }
   };
 
@@ -45,7 +60,7 @@ const MessageInput = ({ input, setInput, sendMessage, darkMode }) => {
     if (isListening) {
       stopListening();  // Stop listening if it's already active
     } else {
-      startListening();  // Start listening for STT
+      startListening(); // Start listening for STT
     }
   };
 
@@ -91,6 +106,9 @@ const MessageInput = ({ input, setInput, sendMessage, darkMode }) => {
           </button>
         </form>
       </div>
+
+      {/* Audio Element for Playing Sound */}
+      <audio ref={audioRef} src="/submitsound.mp3" />
     </div>
   );
 };
