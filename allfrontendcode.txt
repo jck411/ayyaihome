@@ -1,0 +1,1216 @@
+# File: /home/jack/ayyaihome/frontend/src/components/StatusBar.js
+//home/jack/ayyaihome/frontend/src/components/StatusBar.js
+
+import React from 'react';
+import ModeToggle from './ModeToggle';
+import { FiMenu } from 'react-icons/fi';
+
+const StatusBar = ({
+  status,
+  onLogin,
+  loggedInUser,
+  darkMode,
+  toggleDarkMode,
+  toggleSidebar
+}) => {
+  return (
+    <div className="flex items-center justify-between w-full space-x-4 overflow-x-auto bg-inherit p-4">
+      {/* Left side with Sidebar toggle and User logins */}
+      <div className="flex items-center space-x-4">
+        {/* Sidebar toggle icon */}
+        <div className="cursor-pointer p-2" onClick={toggleSidebar}>
+          <FiMenu size={24} style={{ color: 'var(--contrast-orange)' }} />
+        </div>
+
+        {/* User login buttons */}
+        <span
+          onClick={() => onLogin('Jack')}
+          className={`cursor-pointer px-2 py-1 ${
+            loggedInUser === 'Jack' ? 'bg-contrast-orange text-white' : 'text-contrast-orange'
+          }`}
+          style={{ fontWeight: 'bold' }}
+        >
+          Jack
+        </span>
+
+        <span
+          onClick={() => onLogin('Sanja')}
+          className={`cursor-pointer px-2 py-1 ${
+            loggedInUser === 'Sanja' ? 'bg-contrast-orange text-white' : 'text-contrast-orange'
+          }`}
+          style={{ fontWeight: 'bold' }}
+        >
+          Sanja
+        </span>
+
+        <span
+          onClick={() => onLogin('Guest')}
+          className={`cursor-pointer px-2 py-1 ${
+            loggedInUser === 'Guest' ? 'bg-contrast-orange text-white' : 'text-contrast-orange'
+          }`}
+          style={{ fontWeight: 'bold' }}
+        >
+          Guest
+        </span>
+      </div>
+
+      {/* Right side with Online status and ModeToggle */}
+      <div className="flex items-center space-x-4">
+        <span className="text-lg font-bold text-contrast-orange whitespace-nowrap">Online</span>
+        <ModeToggle darkMode={darkMode} toggleDarkMode={toggleDarkMode} />
+      </div>
+    </div>
+  );
+};
+
+export default StatusBar;
+
+
+# File: /home/jack/ayyaihome/frontend/src/components/Sidebar.js
+//home/jack/ayyaihome/frontend/src/components/Sidebar.js
+
+import React from 'react';
+
+const Sidebar = ({ isOpen, selectedAPI, setSelectedAPI, darkMode, ttsEnabled, setTtsEnabled }) => {
+  return (
+    <div
+      className={`fixed left-0 z-40 transition-transform transform ${
+        isOpen ? 'translate-x-0' : '-translate-x-full'
+      }`}
+      style={{
+        top: 'var(--status-bar-height)', // Ensures content is below the status bar
+        height: 'calc(100% - var(--status-bar-height))',
+        width: '250px',
+        backgroundColor: darkMode ? 'var(--dark-bg)' : 'var(--light-bg)',
+        color: 'var(--contrast-orange)',
+      }}
+    >
+      <div className="p-4">
+        {/* TTS Toggle */}
+        <div className="mt-4">
+          <h2 className="font-bold text-contrast-orange">Text-To-Speech</h2>
+          <div className="mt-2">
+            <label className="block cursor-pointer">
+              <input
+                type="checkbox"
+                checked={ttsEnabled}
+                onChange={() => setTtsEnabled(!ttsEnabled)}
+                className="form-checkbox h-4 w-4 text-contrast-orange mr-2"
+                style={{ accentColor: 'var(--contrast-orange)' }}
+              />
+              Enable TTS
+            </label>
+          </div>
+        </div>
+
+        {/* API Selection */}
+        <div className="mt-4">
+          <h2 className="font-bold text-contrast-orange">API Selection</h2>
+          <div className="mt-2">
+            <label className="block cursor-pointer">
+              <input
+                type="radio"
+                name="api-service"
+                checked={selectedAPI === 'openai'}
+                onChange={() => setSelectedAPI('openai')}
+                className="form-radio h-4 w-4 text-contrast-orange mr-2"
+                style={{ accentColor: 'var(--contrast-orange)' }}
+              />
+              OpenAI
+            </label>
+            <label className="block cursor-pointer">
+              <input
+                type="radio"
+                name="api-service"
+                checked={selectedAPI === 'anthropic'}
+                onChange={() => setSelectedAPI('anthropic')}
+                className="form-radio h-4 w-4 text-contrast-orange mr-2"
+                style={{ accentColor: 'var(--contrast-orange)' }}
+              />
+              Anthropic
+            </label>
+          </div>
+        </div>
+
+        {/* Additional sidebar content */}
+        <div className="mt-4">
+          <p className="text-contrast-orange">More sidebar content here...</p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default Sidebar;
+
+
+# File: /home/jack/ayyaihome/frontend/src/components/ModeToggle.js
+import React from 'react';
+import { Sun, Moon } from 'lucide-react';
+
+const ModeToggle = ({ darkMode, toggleDarkMode }) => {
+  return (
+    <button onClick={toggleDarkMode} className="p-2 rounded-full hover:bg-gray-300 dark:hover:bg-gray-700">
+      {darkMode ? <Sun className="w-6 h-6 text-contrast-orange" /> : <Moon className="w-6 h-6 text-contrast-orange" />}
+    </button>
+  );
+};
+
+export default ModeToggle;
+
+
+# File: /home/jack/ayyaihome/frontend/src/components/MessageInput.js
+// src/components/MessageInput.js
+
+import React, { useRef, useState, useEffect, useCallback } from 'react';
+import { Send, Mic, MicOff } from 'lucide-react';
+import useSpeechToText from '../hooks/useSpeechToText';
+
+const MessageInput = ({ input, setInput, sendMessage, darkMode }) => {
+  const [sendOnInput, setSendOnInput] = useState(false); // Flag to trigger sending a message when speech is recognized
+  const textareaRef = useRef(null); // Reference for the textarea element
+  const audioRef = useRef(null); // Reference for the audio element
+
+  // Callback when speech is recognized
+  const handleResult = useCallback((transcript) => {
+    if (transcript !== "Speech not recognized.") {
+      setInput(transcript); // Update the input box with the recognized speech
+      setSendOnInput(true); // Set flag to send the message
+      if (audioRef.current) {
+        audioRef.current.play(); // Play the sound when speech is recognized
+      }
+    } else {
+      console.log("Speech was not recognized."); // Log if the speech was not recognized
+    }
+  }, [setInput]);
+
+  // Callback when an error occurs in Speech-to-Text (STT)
+  const handleError = useCallback((error) => {
+    console.error('Speech recognition error:', error); // Log the error
+    // Optionally, you can notify the user about the error here
+  }, []);
+
+  // Use the custom hook for Speech-to-Text functionality
+  const { isListening, startListening, stopListening } = useSpeechToText(handleResult, handleError);
+
+  // Effect to send message automatically when sendOnInput flag is true
+  useEffect(() => {
+    if (sendOnInput && input.trim()) {
+      sendMessage(); // Send the message using the current input state
+      setInput(''); // Clear input field after sending
+      if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto'; // Reset height after sending
+      }
+      setSendOnInput(false); // Reset the send flag
+    }
+  }, [sendOnInput, input, sendMessage, setInput]);
+
+  // Handle manual message sending via the input field
+  const handleSendMessage = (e) => {
+    e.preventDefault(); // Prevent the default form submission behavior
+    if (input.trim()) {
+      sendMessage(); // Send the message using the current input state
+      setInput(''); // Clear input field after sending
+      if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto'; // Reset height after sending
+      }
+    }
+  };
+
+  // Toggle the microphone listening state
+  const toggleListening = () => {
+    if (isListening) {
+      stopListening(); // Stop listening if it's already active
+    } else {
+      startListening(); // Start listening for speech-to-text
+    }
+  };
+
+  return (
+    <div className="bg-inherit p-4">
+      <div className="mx-auto" style={{ maxWidth: '600px', width: '100%' }}>
+        <form onSubmit={handleSendMessage} className="flex items-start space-x-2">
+          {/* Microphone Button to Toggle STT */}
+          <button
+            type="button"
+            onClick={toggleListening} // Toggle listening state when button is clicked
+            aria-label={isListening ? "Stop listening" : "Start listening"} // Update aria-label based on listening state
+            className={`bg-contrast-orange text-white p-2 rounded-l-lg flex-shrink-0 ${
+              isListening ? 'pulsating' : ''}`} // Apply pulsating effect if listening
+          >
+            {isListening ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />} {/* Change icon based on listening state */}
+          </button>
+
+          {/* Textarea Input Field for Manual Message Entry */}
+          <textarea
+            ref={textareaRef} // Reference for the textarea element
+            value={input} // Controlled component value
+            onChange={(e) => setInput(e.target.value)} // Update input state on manual typing
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                handleSendMessage(e); // Send message on Enter key press (without Shift)
+              }
+            }}
+            style={{ height: 'auto', maxHeight: '150px', overflowY: 'auto' }} // Set textarea height and limit max height
+            className={`flex-grow p-2 border border-contrast-orange focus:border-contrast-orange focus:ring-contrast-orange focus:ring-2 focus:outline-none resize-none ${
+              darkMode ? 'bg-dark-bg text-dark-text' : 'bg-light-bg text-light-text' // Apply styles based on dark mode
+            }`}
+            placeholder="Type your message..." // Placeholder text for the input field
+            rows={1} // Set initial number of rows to 1
+          />
+
+          {/* Send Button */}
+          <button
+            type="submit" // Submit button to send the message
+            className="bg-contrast-orange text-white p-2 rounded-r-lg flex-shrink-0"
+          >
+            <Send className="w-6 h-6" />
+          </button>
+        </form>
+      </div>
+
+      {/* Audio Element for Playing Sound */}
+      <audio ref={audioRef} src="/submitsound.mp3" />
+    </div>
+  );
+};
+
+export default MessageInput;
+
+# File: /home/jack/ayyaihome/frontend/src/components/MessageList.js
+// src/components/MessageList.js
+
+import React, { useEffect, useRef } from 'react';
+import CodeBlock from './CodeBlock';
+
+const renderMessageContent = (content) => {
+  const codeBlockRegex = /```(\w+)?\s([\s\S]*?)\s```/g;
+  const parts = [];
+  let lastIndex = 0;
+
+  content.replace(codeBlockRegex, (match, language, code, offset) => {
+    if (lastIndex < offset) {
+      parts.push(
+        <p key={`text-${lastIndex}`} style={{ whiteSpace: 'pre-wrap', margin: 0 }}>
+          {content.substring(lastIndex, offset)}
+        </p>
+      );
+    }
+    parts.push(<CodeBlock key={offset} code={code.trim()} language={language || 'plaintext'} />);
+    lastIndex = offset + match.length;
+  });
+
+  if (lastIndex < content.length) {
+    parts.push(
+      <p key={`text-${lastIndex}`} style={{ whiteSpace: 'pre-wrap', margin: 0 }}>
+        {content.substring(lastIndex)}
+      </p>
+    );
+  }
+
+  return parts;
+};
+
+const MessageList = ({ messages, sender, onMessageClick }) => {
+  const messagesEndRef = useRef(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  return (
+    <div className="flex-grow overflow-y-auto p-4 message-list">
+      {messages
+        .filter((message) => message.sender === sender || (sender === 'user' && message.metadata?.user))
+        .map((message) => (
+          <div 
+            key={message.id} 
+            id={`${message.sender === 'assistant' ? `ai-message-${message.id}` : ''}`}
+            className={`mb-2 ${message.sender === 'assistant' ? 'ai-response' : 'user-response'}`}
+            onClick={message.sender === 'user' && onMessageClick ? () => onMessageClick(message.id + 1) : null}
+            style={{ cursor: message.sender === 'user' && onMessageClick ? 'pointer' : 'default' }}
+          >
+            <span className="font-bold">
+              {message.sender === 'assistant'
+                ? message.metadata?.assistantType === 'openai'
+                  ? 'OpenAI: '
+                  : 'Anthropic: '
+                : `${message.metadata?.user || 'User'}: `}
+            </span>
+            <div className="message-text">
+              {renderMessageContent(message.text)}
+            </div>
+            <span className="block text-xs text-gray-500">{message.timestamp}</span>
+          </div>
+        ))}
+      <div ref={messagesEndRef} />
+    </div>
+  );
+};
+
+export default MessageList;
+
+
+# File: /home/jack/ayyaihome/frontend/src/components/CodeBlock.js
+import React, { useState, useEffect } from 'react';
+import { CopyToClipboard } from 'react-copy-to-clipboard';
+import hljs from 'highlight.js';
+import 'highlight.js/styles/atom-one-dark.css'; // A popular dark theme for syntax highlighting
+
+const CodeBlock = ({ code, language }) => {
+  const [isCopied, setIsCopied] = useState(false);
+
+  useEffect(() => {
+    hljs.highlightAll();
+  }, []);
+
+  const handleCopy = () => {
+    setIsCopied(true);
+    setTimeout(() => {
+      setIsCopied(false);
+    }, 2000);
+  };
+
+  return (
+    <div className="code-block-container">
+      <div className="code-block-header">
+        <span>{language.toUpperCase()}</span> {/* Display the language type */}
+      </div>
+      <pre>
+        <code className={`hljs ${language}`}>
+          {code}
+        </code>
+      </pre>
+      <CopyToClipboard text={code} onCopy={handleCopy}>
+        <button className="copy-code-button">
+          {isCopied ? 'Copied' : 'Copy'}
+        </button>
+      </CopyToClipboard>
+    </div>
+  );
+};
+
+export default CodeBlock;
+
+
+# File: /home/jack/ayyaihome/frontend/src/hooks/useSpeechToText.js
+// src/hooks/useSpeechToText.js
+
+import { useEffect, useRef, useState, useCallback } from 'react';
+import * as SpeechSDK from 'microsoft-cognitiveservices-speech-sdk';
+
+/**
+ * Custom Hook for Speech-to-Text functionality using Microsoft Cognitive Services.
+ *
+ * @param {function} onResult - Callback function to handle recognized speech.
+ * @param {function} onError - Callback function to handle errors.
+ * @param {string} language - Language for speech recognition (default: 'en-US').
+ * @returns {object} - Contains isListening state, startListening, and stopListening functions.
+ */
+const useSpeechToText = (onResult, onError, language = 'en-US') => {
+  const [isListening, setIsListening] = useState(false);
+  const recognizerRef = useRef(null);
+
+  // Define stopListening first
+  const stopListening = useCallback(() => {
+    if (recognizerRef.current) {
+      recognizerRef.current.stopContinuousRecognitionAsync(
+        () => {
+          console.log('Recognition stopped');
+          setIsListening(false);
+        },
+        (err) => {
+          console.error('Failed to stop recognition:', err);
+          onError(err);
+        }
+      );
+      recognizerRef.current = null;
+    }
+  }, [onError]);
+
+  // Now define startListening and include stopListening in dependencies
+  const startListening = useCallback(() => {
+    if (isListening) return; // Prevent multiple recognizers
+
+    const speechConfig = SpeechSDK.SpeechConfig.fromSubscription(
+      process.env.REACT_APP_SPEECH_KEY,
+      process.env.REACT_APP_SPEECH_REGION
+    );
+    speechConfig.speechRecognitionLanguage = language;
+
+    const audioConfig = SpeechSDK.AudioConfig.fromDefaultMicrophoneInput();
+    const recognizer = new SpeechSDK.SpeechRecognizer(speechConfig, audioConfig);
+
+    recognizer.recognizing = (s, e) => {
+      console.log(`Recognizing: ${e.result.text}`);
+    };
+
+    recognizer.recognized = (s, e) => {
+      if (e.result.reason === SpeechSDK.ResultReason.RecognizedSpeech) {
+        onResult(e.result.text);
+      } else {
+        onResult("Speech not recognized.");
+      }
+    };
+
+    recognizer.canceled = (s, e) => {
+      console.error(`Canceled: ${e.errorDetails}`);
+      onError(e.errorDetails);
+      stopListening();
+    };
+
+    recognizer.sessionStopped = () => {
+      console.log('Session stopped');
+      stopListening();
+    };
+
+    recognizer.startContinuousRecognitionAsync(
+      () => {
+        console.log('Recognition started');
+        setIsListening(true);
+      },
+      (err) => {
+        console.error('Failed to start recognition:', err);
+        onError(err);
+      }
+    );
+
+    recognizerRef.current = recognizer;
+  }, [isListening, language, onResult, onError, stopListening]); // Added 'stopListening'
+
+  // Clean up on unmount
+  useEffect(() => {
+    return () => {
+      stopListening();
+    };
+  }, [stopListening]);
+
+  return { isListening, startListening, stopListening };
+};
+
+export default useSpeechToText;
+
+
+# File: /home/jack/ayyaihome/frontend/src/hooks/useAudioPlayer.js
+// /home/jack/ayyaihome/frontend/src/hooks/useAudioPlayer.js
+
+import { useEffect } from 'react';
+
+const useAudioPlayer = () => {
+  useEffect(() => {
+    let ws;
+
+    try {
+      ws = new WebSocket('ws://localhost:8000/ws/audio');
+      ws.binaryType = 'arraybuffer';
+
+      ws.onopen = () => {
+        console.log('WebSocket connection established');
+      };
+
+      const audioQueue = [];
+      let isPlaying = false;
+
+      const playNext = () => {
+        if (audioQueue.length === 0) {
+          isPlaying = false;
+          return;
+        }
+
+        const audioData = audioQueue.shift();
+        const blob = new Blob([audioData], { type: 'audio/mpeg' });
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+
+        audio.onended = () => {
+          URL.revokeObjectURL(url);
+          playNext();
+        };
+
+        audio.onerror = (e) => {
+          console.error('Audio playback error:', e);
+          URL.revokeObjectURL(url);
+          playNext();
+        };
+
+        audio.play().then(() => {
+          console.log('Audio is playing');
+        }).catch((e) => {
+          console.error('Audio play error:', e);
+          playNext();
+        });
+      };
+
+      ws.onmessage = (event) => {
+        const arrayBuffer = event.data;
+        console.log('Received audio chunk of size:', arrayBuffer.byteLength);
+
+        if (arrayBuffer.byteLength === 0) {
+          console.log('Received zero-length audio chunk, ignoring.');
+          // Optionally, insert a pause or skip
+          return;
+        }
+
+        audioQueue.push(arrayBuffer);
+        if (!isPlaying) {
+          isPlaying = true;
+          playNext();
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+      };
+
+      ws.onclose = (event) => {
+        console.log('WebSocket closed:', event);
+      };
+
+    } catch (e) {
+      console.error('WebSocket initialization error:', e);
+    }
+
+    // Clean up
+    return () => {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.close();
+      }
+    };
+  }, []);
+
+  return null; // This hook does not return a component
+};
+
+export default useAudioPlayer;
+
+
+# File: /home/jack/ayyaihome/frontend/src/services/openaiService.js
+// /home/jack/ayyaihome/frontend/src/services/openaiService.js
+
+// Define an asynchronous function to generate an OpenAI response
+export const generateAIResponse = async (messages, onUpdate, ttsEnabled) => {
+  try {
+    // Format the messages to include 'role' and 'content' fields
+    const formattedMessages = messages.map(msg => {
+      if (msg.sender === "user") {
+        // Add prefix for the logged-in user based on metadata
+        const userPrefix = msg.metadata?.user && msg.metadata.user !== "Guest" ? `${msg.metadata.user}: ` : "";
+        return {
+          role: "user",  // Role is 'user'
+          content: `${userPrefix}${msg.text}`  // Prefix content with user name, or leave as is for Guest
+        };
+      } else if (msg.sender === "assistant") {
+        // Check if the assistant message is from Anthropic, and prepend "Claude:" if so
+        const assistantPrefix = msg.metadata?.assistantType === "anthropic" ? "Claude: " : "";
+        return {
+          role: "assistant",  // Role is 'assistant'
+          content: `${assistantPrefix}${msg.text}`  // Prepend "Claude:" if it's from Anthropic
+        };
+      }
+      return msg;  // Return the message as is if it's not from user or assistant
+    });
+
+    console.log("Formatted messages before sending to OpenAI:", formattedMessages); // Debugging log
+
+    // Send the formatted messages and TTS state to the OpenAI backend
+    const response = await fetch('http://localhost:8000/api/openai', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ messages: formattedMessages, ttsEnabled })  // Include ttsEnabled in the request body
+    });
+
+    // Wait until headers are available
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const requestId = response.headers.get('X-Request-ID');
+
+    if (!response.ok) {
+      throw new Error('Failed to send request to OpenAI backend');
+    }
+
+    // Process the streamed response
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let fullContent = "";
+
+    let isFirstChunk = true;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        onUpdate(fullContent, true);  // Indicate that the response is complete
+        break;
+      }
+      const content = decoder.decode(value, { stream: true });
+      fullContent += content;
+
+      if (isFirstChunk) {
+        isFirstChunk = false;
+        onUpdate(fullContent, false, requestId);  // Pass requestId on the first update
+      } else {
+        onUpdate(fullContent);  // Subsequent updates
+      }
+    }
+  } catch (error) {
+    console.error('Error in generateAIResponse:', error);
+    throw error;
+  }
+};
+
+
+# File: /home/jack/ayyaihome/frontend/src/services/anthropicService.js
+// /home/jack/ayyaihome/frontend/src/services/anthropicService.js
+
+// Define an asynchronous function to generate an Anthropic AI response
+export const generateAnthropicResponse = async (messages, onUpdate, ttsEnabled) => {
+  try {
+    // Format the messages, prefix "GPT: " for OpenAI assistant messages based on metadata
+    const formattedMessages = messages.map(msg => {
+      // Check if the message is from OpenAI assistant and add "GPT: " prefix
+      if (msg.sender === "assistant" && msg.metadata?.assistantType === "openai") {
+        return {
+          role: "assistant",  // Keep the role as "assistant"
+          content: `GPT: ${msg.text}`  // Add "GPT:" prefix to the content
+        };
+      } else if (msg.sender === "user") {
+        // Add prefix for the logged-in user based on metadata
+        const userPrefix = msg.metadata?.user && msg.metadata.user !== "Guest" ? `${msg.metadata.user}: ` : "";
+        return {
+          role: "user",  // Role is 'user'
+          content: `${userPrefix}${msg.text}`  // Prefix content with user name, or leave as is for Guest
+        };
+      } else {
+        // For assistant messages, handle them normally
+        return {
+          role: "assistant",
+          content: msg.text
+        };
+      }
+    });
+
+    console.log("Formatted messages before sending to Anthropic:", formattedMessages);
+
+    // Send the formatted messages and TTS state to the Anthropic backend
+    const response = await fetch('http://localhost:8000/api/anthropic', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ messages: formattedMessages, ttsEnabled })  // Include ttsEnabled in the request body
+    });
+
+    // Wait until headers are available
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const requestId = response.headers.get('X-Request-ID');
+
+    if (!response.ok) {
+      throw new Error('Failed to send request to Anthropic backend');
+    }
+
+    // Process the streamed response
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let fullContent = "";
+
+    let isFirstChunk = true;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        onUpdate(fullContent, true);  // Indicate that the response is complete
+        break;
+      }
+      const content = decoder.decode(value, { stream: true });
+      fullContent += content;
+
+      if (isFirstChunk) {
+        isFirstChunk = false;
+        onUpdate(fullContent, false, requestId);  // Pass requestId on the first update
+      } else {
+        onUpdate(fullContent);  // Subsequent updates
+      }
+    }
+  } catch (error) {
+    console.error('Error in generateAnthropicResponse:', error);
+    throw error;
+  }
+};
+
+
+# File: /home/jack/ayyaihome/frontend/src/App.js
+// /home/jack/ayyaihome/frontend/src/App.js
+
+import React, { useState, useEffect } from 'react';
+import Sidebar from './components/Sidebar';
+import StatusBar from './components/StatusBar';
+import MessageList from './components/MessageList';
+import MessageInput from './components/MessageInput';
+import { useMessageLogic } from './MessageLogic';
+import useAudioPlayer from './hooks/useAudioPlayer'; // Import the useAudioPlayer hook
+
+const App = () => {
+  const {
+    messages,
+    input,
+    setInput,
+    status,
+    sendMessage,
+    selectedAPI,
+    setSelectedAPI,
+    sendStopSignal,
+    setLoggedInUser,
+    ttsEnabled,
+    setTtsEnabled
+  } = useMessageLogic();  // All logic comes from useMessageLogic
+
+  const [darkMode, setDarkMode] = useState(true);
+  const [isSidebarOpen, setSidebarOpen] = useState(false);
+  const [leftWidth, setLeftWidth] = useState(30); 
+  const [loggedInUser, setLoggedInUserState] = useState(null);
+
+  // Initialize the audio player
+  useAudioPlayer(); 
+
+  const onLogin = (user) => {
+    setLoggedInUserState(user);
+    setLoggedInUser(user);  // Set logged in user from logic
+  };
+
+  const toggleDarkMode = () => setDarkMode(!darkMode);
+  const toggleSidebar = () => setSidebarOpen(!isSidebarOpen);
+
+  useEffect(() => {
+    if (darkMode) {
+      document.body.classList.add('dark-mode');
+    } else {
+      document.body.classList.remove('dark-mode');
+    }
+  }, [darkMode]);
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === "Enter" && event.target.tagName !== "TEXTAREA") {
+        event.preventDefault();
+        sendStopSignal();  // Call stop signal from message logic
+        console.log('Sending stop signal via Enter key');
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [sendStopSignal]);
+
+  const handleDrag = (e) => {
+    const containerOffset = (window.innerWidth - 950) / 2;
+    const newLeftWidth = ((e.clientX - containerOffset) / 950) * 100;
+    if (newLeftWidth > 20 && newLeftWidth < 80) {
+      setLeftWidth(newLeftWidth);
+    }
+  };
+
+  const handleDragEnd = () => {
+    document.removeEventListener('mousemove', handleDrag);
+    document.removeEventListener('mouseup', handleDragEnd);
+  };
+
+  const handleMouseDown = () => {
+    document.addEventListener('mousemove', handleDrag);
+    document.addEventListener('mouseup', handleDragEnd);
+  };
+
+  const scrollToAIMessage = (id) => {
+    const element = document.getElementById(`ai-message-${id}`);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  };
+
+  return (
+    <div className={`min-h-screen w-full`}>
+      {/* Sidebar */}
+      <div className={`fixed top-0 left-0 h-full z-30 transition-transform duration-300 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <Sidebar
+          isOpen={isSidebarOpen}
+          selectedAPI={selectedAPI}
+          setSelectedAPI={setSelectedAPI}
+          darkMode={darkMode}
+          ttsEnabled={ttsEnabled}
+          setTtsEnabled={setTtsEnabled}
+        />
+      </div>
+
+      {/* Header */}
+      <div className="fixed top-0 left-0 right-0 z-40">
+        <StatusBar 
+          status={status} 
+          onLogin={onLogin} 
+          loggedInUser={loggedInUser} 
+          darkMode={darkMode} 
+          toggleDarkMode={toggleDarkMode}
+          toggleSidebar={toggleSidebar}
+        />
+      </div>
+
+      {/* Main content area */}
+      <div className={`flex flex-col h-screen pt-16 pb-16`}>
+        <div className="mx-auto main-content" style={{ maxWidth: '950px', width: '100%' }}>
+          {/* Chat area */}
+          <div className={`flex flex-grow overflow-hidden transition-all duration-300`}>
+            <div className="flex flex-col message-list" style={{ width: `${leftWidth}%` }}>
+              <MessageList
+                messages={messages}   // Messages from useMessageLogic
+                sender="user"
+                onMessageClick={scrollToAIMessage}
+              />
+            </div>
+            <div className="mid-cursor-wrapper" onMouseDown={handleMouseDown}>
+              <div className="mid-cursor" />
+            </div>
+            <div className="flex flex-col message-list" style={{ width: `${100 - leftWidth}%` }}>
+              <MessageList 
+                messages={messages} 
+                sender="assistant" 
+                onMessageClick={null} 
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="fixed bottom-0 left-0 right-0 z-40">
+        <MessageInput 
+          input={input} 
+          setInput={setInput} 
+          sendMessage={sendMessage} 
+          darkMode={darkMode} 
+        />
+      </div>
+    </div>
+  );
+};
+
+export default App;
+
+
+# File: /home/jack/ayyaihome/frontend/src/MessageLogic.js
+import { useState } from 'react';
+import { generateAIResponse } from './services/openaiService';
+import { generateAnthropicResponse } from './services/anthropicService';
+
+export const useMessageLogic = () => {
+  // State to manage the list of messages
+  const [messages, setMessages] = useState([]);
+  // State to manage the user input
+  const [input, setInput] = useState("");
+  // State to manage the status (e.g., Online, Listening, Offline)
+  const [status, setStatus] = useState("Online");
+  // State to track which API is selected (openai or anthropic)
+  const [selectedAPI, setSelectedAPI] = useState('openai');
+  // State to track the logged-in user
+  const [loggedInUser, setLoggedInUser] = useState('guest');
+  // State to track whether TTS (Text-to-Speech) is enabled
+  const [ttsEnabled, setTtsEnabled] = useState(true);
+
+  // Function to send a message and handle the API response
+  const sendMessage = async () => {
+    // Do nothing if the input is empty or contains only whitespace
+    if (!input.trim()) return;
+
+    // Generate a timestamp for the message
+    const timestamp = new Date().toLocaleTimeString();
+
+    // Create the user message object with metadata
+    const userMessage = {
+      id: messages.length + 1,
+      text: input,
+      sender: "user",
+      timestamp,
+      metadata: { user: loggedInUser || "Anonymous" }  // Add metadata for the logged-in user
+    };
+
+    console.log('User message sent:', userMessage);  // Log the user message
+
+    // Add the user message to the current context (message history)
+    const context = [...messages, userMessage];
+    setMessages(context);  // Update the state with the new message
+    setInput("");  // Clear the input field
+    setStatus("Listening...");  // Update status to indicate the assistant is processing
+
+    try {
+      // Call the appropriate API based on the selected option
+      if (selectedAPI === 'openai') {
+        await generateAIResponse(context, (content, isComplete = false) => {
+          // Update messages with the assistant's response
+          updateMessages(content, userMessage.id, isComplete);
+        }, ttsEnabled);  // Pass TTS status to OpenAI service
+      } else if (selectedAPI === 'anthropic') {
+        await generateAnthropicResponse(context, (content, isComplete = false) => {
+          // Update messages with the assistant's response
+          updateMessages(content, userMessage.id, isComplete);
+        }, ttsEnabled);  // Pass TTS status to Anthropic service
+      }
+
+      setStatus("Online");  // Update status to indicate the assistant is ready
+    } catch (error) {
+      console.error('Error:', error);  // Log any errors
+      setStatus("Offline");  // Update status to indicate an error occurred
+    }
+  };
+
+  // Function to update the messages state with the assistant's response
+  const updateMessages = (content, messageId, isComplete = false) => {
+    setMessages((prevMessages) => {
+      // Create a copy of the previous messages
+      const updatedMessages = [...prevMessages];
+      // Find if there is already an assistant message that needs updating
+      const existingAssistantMessage = updatedMessages.find(
+        (msg) => msg.sender === "assistant" && msg.id === messageId + 1
+      );
+
+      if (existingAssistantMessage) {
+        // If an assistant message already exists, update its text
+        existingAssistantMessage.text = content;
+      } else {
+        // If no assistant message exists, create a new one
+        const newAssistantMessage = {
+          id: messageId + 1,
+          text: content,
+          sender: "assistant",
+          timestamp: new Date().toLocaleTimeString(),
+          metadata: { assistantType: selectedAPI === "anthropic" ? "anthropic" : "openai" }  // Add metadata to indicate which API was used
+        };
+        updatedMessages.push(newAssistantMessage);  // Add the new assistant message
+      }
+
+      return updatedMessages;  // Return the updated list of messages
+    });
+  };
+
+  // Return the state and functions to be used in the component
+  return {
+    messages,
+    input,
+    setInput,
+    status,
+    sendMessage,
+    selectedAPI,
+    setSelectedAPI,
+    setLoggedInUser,
+    ttsEnabled,           // Expose TTS toggle state
+    setTtsEnabled         // Expose function to toggle TTS
+  };
+};
+
+# File: /home/jack/ayyaihome/frontend/tailwind.config.js
+module.exports = {
+  darkMode: 'class', // Enable dark mode support
+  content: [
+    './src/**/*.{js,jsx,ts,tsx}',
+  ],
+  theme: {
+    extend: {
+      colors: {
+        'dark-bg': 'var(--dark-bg)',       // Dark mode background
+        'dark-text': 'var(--dark-text)',   // Dark mode text
+        'dark-primary': 'var(--contrast-orange)',  // Dark mode primary (new orange)
+
+        'light-bg': 'var(--light-bg)',     // Darker light mode background
+        'light-text': 'var(--light-text)', // Darker light mode text
+        'light-primary': 'var(--contrast-orange)', // Light mode primary (new orange)
+
+        'contrast-orange': 'var(--contrast-orange)' // Unified contrasting new orange color
+      },
+    },
+  },
+  plugins: [],
+}
+
+
+# File: /home/jack/ayyaihome/frontend/src/index.css
+/* Reset and base styles */
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--light-bg);
+  color: var(--light-text);
+  transition: background-color 0.3s, color 0.3s;
+  overflow: hidden; /* Prevent body scroll */
+}
+
+/* Dark mode styling */
+body.dark-mode {
+  background-color: var(--dark-bg);
+  color: var(--dark-text);
+}
+
+/* Root variables */
+:root {
+  --contrast-orange: #CC5500; /* Burnt orange color */
+  --dark-bg: #1D1F21; /* Background color for dark mode */
+  --dark-text: #d8d4cf; /* Light text color for dark mode */
+  --light-bg: #d8d8d8; /* Background color for light mode */
+  --light-text: #1f1e1e; /* Dark text color for light mode */
+  --message-text-light: #1f1e1e; /* Default text color for light mode */
+  --message-text-dark: #CC5500; /* Burnt orange for dark mode */
+  --status-bar-height: 50px; /* Define your status bar height here */
+
+}
+
+/* Tailwind base imports */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom scrollbar styles */
+::-webkit-scrollbar {
+  width: 8px;
+  background: transparent;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--contrast-orange);
+  border-radius: 10px;
+}
+
+/* Mid-cursor for dragging */
+.mid-cursor-wrapper {
+  position: relative;
+  width: 10px; /* Increase width for easier dragging */
+  cursor: col-resize;
+  display: flex;
+  align-items: stretch; /* Ensure it spans the full height */
+  justify-content: center;
+}
+
+.mid-cursor {
+  width: 1px;
+  height: 100%; /* Span the full height */
+  background-color: var(--contrast-orange);
+  position: relative;
+}
+
+.mid-cursor::before {
+  content: '';
+  position: absolute;
+  top: 50%; /* Center vertically */
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 8px;
+  height: 8px;
+  background-color: var(--contrast-orange);
+  border-radius: 50%;
+}
+
+/* Message text styling */
+.message-text {
+  color: var(--message-text-light);
+}
+
+body.dark-mode .message-text {
+  color: var(--message-text-dark) !important;
+}
+
+/* User and Assistant Label Styling */
+.font-bold {
+  color: var(--contrast-orange) !important;
+}
+
+/* Z-index adjustments */
+.z-30 {
+  z-index: 30;
+}
+
+.z-40 {
+  z-index: 40;
+}
+
+/* Ensure the main content scrolls independently */
+.main-content {
+  position: relative;
+  overflow: hidden;
+  flex-grow: 1;
+  display: flex;
+  padding-top: 5px;
+  padding-bottom: 25px;
+}
+
+/* Message list styling */
+.message-list {
+  overflow-y: auto;
+  flex-grow: 1;
+}
+
+/* Code block styling */
+.code-block-container {
+  background-color: #202123;
+  border: 1px solid #333;
+  border-radius: 4px;
+  padding: 16px;
+  position: relative;
+  font-family: "Courier New", Courier, monospace;
+  color: #f8f8f2;
+}
+
+.code-block-header {
+  font-size: 12px;
+  color: #bbb;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+/* Syntax highlighting colors */
+code.hljs {
+  color: #f8f8f2;
+}
+
+code.hljs .hljs-keyword {
+  color: #c678dd;
+}
+
+code.hljs .hljs-string {
+  color: #98c379;
+}
+
+code.hljs .hljs-comment {
+  color: #5c6370;
+}
+
+/* Copy button styling */
+.copy-code-button {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background-color: #333;
+  color: #fff;
+  border: none;
+  padding: 4px 8px;
+  font-size: 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.copy-code-button:hover {
+  background-color: #555;
+}
+
+

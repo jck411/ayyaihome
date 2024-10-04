@@ -1,0 +1,755 @@
+# File: /home/jack/ayyaihome/backend/endpoints/anthropic.py
+from fastapi import APIRouter, Request
+from fastapi.responses import StreamingResponse
+import asyncio
+import queue
+from init import ANTHROPIC_CONSTANTS, anthropic_client
+from services.tts_service import process_streams
+from services.audio_player import find_next_phrase_end
+
+anthropic_router = APIRouter()
+
+@anthropic_router.post("/api/anthropic")
+async def anthropic_chat(request: Request):
+    """
+    Handles POST requests to the "/api/anthropic" endpoint.
+    """
+    print("Received request")
+
+    try:
+        # Parse incoming data
+        data = await request.json()
+        print(f"Parsed request data: {data}")
+        messages = [{"role": msg["role"], "content": msg["content"]} for msg in data.get('messages', [])]
+
+        if not messages:
+            print("No messages found in the request")
+            return {"error": "Prompt is required."}
+
+        tts_enabled = data.get('ttsEnabled', True)  # Get TTS enabled state from the request
+        print(f"TTS Enabled: {tts_enabled}")
+
+        # Initialize phrase queue only if TTS is enabled
+        phrase_queue = None
+        if tts_enabled:
+            phrase_queue = asyncio.Queue()
+            audio_queue = queue.Queue()  # Synchronous queue for audio processing
+
+            # Start TTS processing in the background
+            print("Starting TTS processing")
+            asyncio.create_task(process_streams(phrase_queue, audio_queue, ANTHROPIC_CONSTANTS))
+
+        # Stream response back to the client
+        response = StreamingResponse(
+            stream_completion(messages, phrase_queue),
+            media_type='text/plain'
+        )
+        print("Sending response with streaming content")
+        return response
+
+    except Exception as e:
+        print(f"Unexpected error: {str(e)}")
+        return {"error": f"Unexpected error: {str(e)}"}
+
+
+async def stream_completion(messages: list, phrase_queue: asyncio.Queue):
+    """
+    Streams the response from the Anthropic API.
+    """
+    try:
+        # Request the response from the Anthropic API with the top-level system prompt
+        print("Starting to stream completion from Anthropic API")
+        async with anthropic_client.messages.stream(
+            model=ANTHROPIC_CONSTANTS["DEFAULT_RESPONSE_MODEL"],
+            messages=messages,
+            max_tokens=1024,
+            temperature=ANTHROPIC_CONSTANTS["TEMPERATURE"],
+            system=ANTHROPIC_CONSTANTS["SYSTEM_PROMPT"]["content"]  # Top-level system prompt parameter
+        ) as stream:
+            working_string = ""  # Accumulates the full response
+            in_code_block = False  # Track whether we're inside a code block
+
+            # Stream the response chunks as they arrive
+            async for chunk in stream.text_stream:
+                content = chunk or ""
+                if content:
+                    print(f"Received chunk: {content}")
+                    yield content
+                    working_string += content
+
+                    # Process phrases
+                    while True:
+                        if in_code_block:
+                            code_block_end = working_string.find("```", 3)
+                            if code_block_end != -1:
+                                working_string = working_string[code_block_end + 3:]
+                                if phrase_queue:
+                                    await phrase_queue.put("Code presented on screen")
+                                in_code_block = False
+                            else:
+                                break
+                        else:
+                            code_block_start = working_string.find("```")
+                            if code_block_start != -1:
+                                phrase, working_string = working_string[:code_block_start], working_string[code_block_start:]
+                                if phrase.strip() and phrase_queue:
+                                    await phrase_queue.put(phrase.strip())
+                                in_code_block = True
+                            else:
+                                next_phrase_end = find_next_phrase_end(working_string)
+                                if next_phrase_end == -1:
+                                    break
+                                phrase, working_string = working_string[:next_phrase_end + 1].strip(), working_string[next_phrase_end + 1:]
+                                if phrase_queue and phrase:
+                                    await phrase_queue.put(phrase)
+
+            # Process any remaining text after streaming ends
+            while working_string:
+                if in_code_block:
+                    code_block_end = working_string.find("```", 3)
+                    if code_block_end != -1:
+                        working_string = working_string[code_block_end + 3:]
+                        if phrase_queue:
+                            await phrase_queue.put("Code presented on screen")
+                        in_code_block = False
+                    else:
+                        break
+                else:
+                    code_block_start = working_string.find("```")
+                    if code_block_start != -1:
+                        phrase, working_string = working_string[:code_block_start], working_string[code_block_start:]
+                        if phrase.strip() and phrase_queue:
+                            await phrase_queue.put(phrase.strip())
+                        in_code_block = True
+                    else:
+                        if working_string.strip() and phrase_queue:
+                            await phrase_queue.put(working_string.strip())
+                        working_string = ''
+
+            # End the TTS processing
+            if phrase_queue:
+                print("Ending TTS processing")
+                await phrase_queue.put(None)
+
+    except Exception as e:
+        print(f"Error during streaming: {str(e)}")
+        if phrase_queue:
+            await phrase_queue.put(None)
+        yield f"Error: {e}"
+
+
+# File: /home/jack/ayyaihome/backend/endpoints/openai.py
+from fastapi import APIRouter, Request
+from fastapi.responses import StreamingResponse
+import asyncio
+import queue
+import logging
+from init import OPENAI_CONSTANTS, aclient
+from services.tts_service import process_streams
+from services.audio_player import find_next_phrase_end
+
+# Configure logging to log messages with INFO level and above
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Create a FastAPI router instance
+openai_router = APIRouter()
+
+@openai_router.post("/api/openai")
+async def openai_stream(request: Request):
+    """
+    Handles POST requests to the "/api/openai" endpoint.
+    """
+    try:
+        logger.info("Received request at /api/openai")
+        # Parse incoming JSON data from the request
+        data = await request.json()
+        logger.info(f"Request data: {data}")
+
+        # Extract messages from the request and prepend the system prompt
+        messages = [{"role": msg["role"], "content": msg["content"]} for msg in data.get('messages', [])]
+        messages.insert(0, OPENAI_CONSTANTS["SYSTEM_PROMPT"])
+        logger.info(f"Messages after adding system prompt: {messages}")
+
+        # Determine if TTS (Text-To-Speech) is enabled
+        tts_enabled = data.get('ttsEnabled', True)
+        logger.info(f"TTS Enabled: {tts_enabled}")
+
+        # Initialize phrase queue only if TTS is enabled
+        phrase_queue = None
+        if tts_enabled:
+            # Create asynchronous and synchronous queues for processing TTS
+            phrase_queue = asyncio.Queue()
+            audio_queue = queue.Queue()  # Synchronous queue for audio processing
+            logger.info("Initialized phrase and audio queues")
+
+            # Start the TTS processing task with required arguments
+            asyncio.create_task(process_streams(phrase_queue, audio_queue, OPENAI_CONSTANTS))
+            logger.info("Started TTS processing task")
+
+        # Return a streaming response and pass the phrase queue to handle TTS
+        response = StreamingResponse(
+            stream_completion(messages, phrase_queue),
+            media_type='text/plain'
+        )
+        logger.info("Streaming response initialized")
+        return response
+
+    except Exception as e:
+        logger.error(f"Error in openai_stream: {e}")
+        return {"error": f"Unexpected error: {str(e)}"}
+
+async def stream_completion(messages: list, phrase_queue: asyncio.Queue, model: str = OPENAI_CONSTANTS["DEFAULT_RESPONSE_MODEL"]):
+    """
+    Streams the response from the OpenAI API.
+    """
+    try:
+        logger.info("Starting stream_completion")
+        # Send the request to the OpenAI API to generate a completion
+        response = await aclient.chat.completions.create(
+            model=model,
+            messages=messages,
+            stream=True,
+            temperature=OPENAI_CONSTANTS["TEMPERATURE"],
+            top_p=OPENAI_CONSTANTS["TOP_P"],
+        )
+        logger.info("Received response from OpenAI API")
+
+        working_string = ""  # To store text content temporarily
+        in_code_block = False  # Flag to track whether we are inside a code block
+
+        async for chunk in response:
+            # Extract content from the response chunk, if available
+            content = getattr(chunk.choices[0].delta, 'content', "") if chunk.choices else ""
+
+            if content:
+                logger.info(f"Streaming content: {content}")
+                yield content  # Stream content back to the client
+                working_string += content
+
+                # Process phrases to identify and handle code blocks and phrases
+                while True:
+                    if in_code_block:
+                        # Find the end of the code block
+                        code_block_end = working_string.find("```", 3)
+                        if code_block_end != -1:
+                            # Remove the code block from the working string
+                            working_string = working_string[code_block_end + 3:]
+                            if phrase_queue:
+                                await phrase_queue.put("Code presented on screen")
+                                logger.info("Code block ended, queued code presented message")
+                            in_code_block = False
+                        else:
+                            break
+                    else:
+                        # Find the start of the next code block
+                        code_block_start = working_string.find("```")
+                        if code_block_start != -1:
+                            # Extract the phrase before the code block
+                            phrase, working_string = working_string[:code_block_start], working_string[code_block_start:]
+                            if phrase.strip() and phrase_queue:
+                                await phrase_queue.put(phrase.strip())
+                                logger.info(f"Queued phrase: {phrase.strip()}")
+                            in_code_block = True
+                        else:
+                            # Find the next phrase ending point
+                            next_phrase_end = find_next_phrase_end(working_string)
+                            if next_phrase_end == -1:
+                                break
+                            # Extract the phrase and update the working string
+                            phrase, working_string = working_string[:next_phrase_end + 1].strip(), working_string[next_phrase_end + 1:]
+                            if phrase_queue and phrase:
+                                await phrase_queue.put(phrase)
+                                logger.info(f"Queued phrase: {phrase}")
+
+        # Process any remaining text after streaming ends
+        while True:
+            if in_code_block:
+                # Find the end of the code block
+                code_block_end = working_string.find("```", 3)
+                if code_block_end != -1:
+                    # Remove the code block from the working string
+                    working_string = working_string[code_block_end + 3:]
+                    if phrase_queue:
+                        await phrase_queue.put("Code presented on screen")
+                        logger.info("Code block ended, queued code presented message")
+                    in_code_block = False
+                else:
+                    break
+            else:
+                # Find the start of the next code block
+                code_block_start = working_string.find("```")
+                if code_block_start != -1:
+                    # Extract the phrase before the code block
+                    phrase, working_string = working_string[:code_block_start], working_string[code_block_start:]
+                    if phrase.strip() and phrase_queue:
+                        await phrase_queue.put(phrase.strip())
+                        logger.info(f"Queued phrase: {phrase.strip()}")
+                    in_code_block = True
+                else:
+                    # Queue any remaining text
+                    if working_string.strip() and phrase_queue:
+                        await phrase_queue.put(working_string.strip())
+                        logger.info(f"Queued remaining working string: {working_string.strip()}")
+                        working_string = ''
+                    break
+
+        # End of TTS - indicate that no more phrases will be sent
+        if phrase_queue:
+            await phrase_queue.put(None)
+            logger.info("Queued None to indicate end of TTS")
+
+    except Exception as e:
+        # Handle exceptions and ensure the phrase queue ends properly
+        if phrase_queue:
+            await phrase_queue.put(None)
+            logger.error(f"Error in stream_completion: {e}, queued None to indicate end of TTS")
+        yield f"Error: {e}"
+        logger.error(f"Yielding error: {e}")
+
+# File: /home/jack/ayyaihome/backend/endpoints/stop.py
+# /home/jack/ayyaihome/backend/endpoints/stop.py
+
+from fastapi import APIRouter, Request
+from stop_events import stop_events  # Import stop_events from the new module
+
+stop_router = APIRouter()
+
+@stop_router.post("/api/stop")
+async def stop_tts(request: Request):
+    """
+    Handles requests to stop TTS processing for a specific request.
+    """
+    data = await request.json()
+    request_id = data.get('request_id')
+    if request_id and request_id in stop_events:
+        stop_events[request_id].set()
+        del stop_events[request_id]  # Remove the stop event after setting it
+        return {"status": f"Stopping request {request_id}"}
+    else:
+        return {"error": "Invalid request ID"}
+
+
+# File: /home/jack/ayyaihome/backend/services/tts_service.py
+import asyncio
+import logging
+import queue
+from init import aclient, SHARED_CONSTANTS, connection_manager, pyaudio
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# Main function to process audio streams based on configuration
+async def process_streams(phrase_queue: asyncio.Queue, audio_queue: queue.Queue, tts_constants):
+    if SHARED_CONSTANTS.get("FRONTEND_PLAYBACK", False):
+        # If FRONTEND_PLAYBACK is enabled, send audio via WebSocket
+        audio_sender_task = asyncio.create_task(audio_sender(audio_queue))
+        await text_to_speech_processor(phrase_queue, audio_queue, tts_constants)
+        audio_queue.put(None)  # Signal the end of audio processing
+        await audio_sender_task
+    else:
+        # If FRONTEND_PLAYBACK is not enabled, play audio locally
+        audio_player_task = asyncio.create_task(audio_player(audio_queue, tts_constants))
+        await text_to_speech_processor(phrase_queue, audio_queue, tts_constants)
+        audio_queue.put(None)  # Signal the end of audio processing
+        await audio_player_task
+
+# Function to process text-to-speech requests
+async def text_to_speech_processor(phrase_queue: asyncio.Queue, audio_queue: queue.Queue, tts_constants):
+    try:
+        while True:
+            # Get the next phrase from the queue
+            phrase = await phrase_queue.get()
+            if phrase is None:
+                logger.info("Received stop signal. Exiting TTS processor.")
+                return
+            try:
+                logger.info(f"Processing phrase: {phrase}")
+                # Create a streaming response for the given phrase
+                async with aclient.audio.speech.with_streaming_response.create(
+                    model=tts_constants["DEFAULT_TTS_MODEL"],
+                    voice=tts_constants["DEFAULT_VOICE"],
+                    input=phrase,
+                    speed=tts_constants["TTS_SPEED"],
+                    response_format=tts_constants["RESPONSE_FORMAT"]
+                ) as response:
+                    audio_data = b""
+                    # Iterate over the response chunks and accumulate audio data
+                    async for audio_chunk in response.iter_bytes(tts_constants["TTS_CHUNK_SIZE"]):
+                        audio_data += audio_chunk
+                    # Enqueue the audio data for further processing (playback or sending)
+                    audio_queue.put(audio_data)
+                    logger.info(f"Enqueued audio data for phrase.")
+            except Exception as tts_error:
+                logger.error(f"TTS processing failed with error: {tts_error}")
+                audio_queue.put(None)  # Signal an error occurred
+                break  # Exit on TTS error
+    except Exception as e:
+        logger.error(f"Error in text_to_speech_processor: {e}")
+        audio_queue.put(None)  # Signal an error occurred
+
+# Function to send audio data via WebSocket
+async def audio_sender(audio_queue: queue.Queue):
+    try:
+        logger.info("Audio sender started.")
+        while True:
+            # Get the next audio data from the queue (blocking call executed in a thread pool)
+            audio_data = await asyncio.get_event_loop().run_in_executor(None, audio_queue.get)
+            if audio_data is None:
+                logger.info("Audio sender ended.")
+                break
+            if not audio_data:
+                # Skip sending empty audio data
+                continue
+            # Send audio data if there is an active WebSocket connection
+            if connection_manager.active_connection:
+                await connection_manager.send_audio(audio_data)
+            else:
+                logger.warning("No active WebSocket connection to send audio.")
+    except Exception as e:
+        logger.error(f"Error in audio_sender: {e}")
+
+# Function to play audio data locally using PyAudio
+async def audio_player(audio_queue: queue.Queue, tts_constants):
+    try:
+        logger.info("Backend audio player started.")
+        # Initialize PyAudio
+        p = pyaudio.PyAudio()
+        # Configure audio stream based on RESPONSE_FORMAT
+        stream = p.open(format=pyaudio.paInt16,
+                        channels=tts_constants["CHANNELS"],
+                        rate=tts_constants["RATE"],
+                        output=True)
+        while True:
+            # Get the next audio data from the queue (blocking call executed in a thread pool)
+            audio_data = await asyncio.get_event_loop().run_in_executor(None, audio_queue.get)
+            if audio_data is None:
+                logger.info("Audio player ended.")
+                break
+            if not audio_data:
+                # Skip empty audio data
+                continue
+            # Play the audio data using the PyAudio stream
+            stream.write(audio_data)
+        # Clean up the audio stream and terminate PyAudio
+        stream.stop_stream()
+        stream.close()
+        p.terminate()
+    except Exception as e:
+        logger.error(f"Error in audio_player: {e}")
+
+# File: /home/jack/ayyaihome/backend/services/audio_player.py
+import queue
+import threading
+import logging
+from init import p, OPENAI_CONSTANTS
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,  # Set the logging level to INFO
+    format='%(asctime)s - %(levelname)s - %(message)s'  # Define log message format
+)
+logger = logging.getLogger(__name__)
+
+def find_next_phrase_end(text: str) -> int:
+    """
+    Finds the position of the next sentence-ending delimiter in the text
+    starting from a specified minimum length.
+    """
+    sentence_delim_pos = [text.find(d, OPENAI_CONSTANTS["MINIMUM_PHRASE_LENGTH"]) for d in OPENAI_CONSTANTS["DELIMITERS"]]
+    sentence_delim_pos = [pos for pos in sentence_delim_pos if pos != -1]
+    return min(sentence_delim_pos, default=-1)
+
+def audio_player(audio_queue: queue.Queue):
+    """
+    Plays audio data from the audio queue using PyAudio.
+    Runs in a separate thread.
+    Logs when playback starts and ends.
+    """
+    stream = None
+    audio_playing = False  # Flag to track if audio is currently playing
+    try:
+        # Open the PyAudio stream for playback
+        stream = p.open(
+            format=OPENAI_CONSTANTS["AUDIO_FORMAT"],  # Use configurable audio format
+            channels=OPENAI_CONSTANTS["CHANNELS"],
+            rate=OPENAI_CONSTANTS["RATE"],
+            output=True,
+            frames_per_buffer=2048  # Buffer size for audio playback
+        )
+        stream.write(b'\x00' * 2048)  # Pre-fill buffer with silence
+
+        logger.info("Audio player thread started.")
+
+        while True:
+            # Get the next chunk of audio data
+            audio_data = audio_queue.get()
+
+            if audio_data is None:
+                if audio_playing:
+                    logger.info("Audio playback ended.")
+                break  # Exit if there's no more audio data
+
+            # Ensure audio data is in the correct PCM format
+            if not isinstance(audio_data, (bytes, bytearray)):
+                continue
+
+            if not audio_playing:
+                logger.info("Audio playback started.")
+                audio_playing = True
+
+            # Play the audio data
+            stream.write(audio_data)
+            # Optionally, log each audio chunk being played (use DEBUG level to avoid clutter)
+            # logger.debug("Playing audio chunk.")
+
+        if audio_playing:
+            logger.info("Audio playback ended.")
+
+    except Exception as e:
+        logger.error(f"Error in audio_player: {e}")
+    finally:
+        if stream:
+            stream.stop_stream()  # Stop the audio stream
+            stream.close()  # Close the audio stream
+            logger.info("Audio stream closed.")
+
+def start_audio_player(audio_queue: queue.Queue):
+    """
+    Starts the audio player in a separate thread.
+    """
+    threading.Thread(target=audio_player, args=(audio_queue,), daemon=True).start()
+    logger.info("Audio player thread initiated.")
+
+# File: /home/jack/ayyaihome/backend/app.py
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from endpoints.openai import openai_router
+from endpoints.anthropic import anthropic_router
+import asyncio
+import logging
+from init import connection_manager
+
+# Initialize the FastAPI app
+app = FastAPI()
+
+# Add CORS middleware to handle cross-origin requests
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],  # Adjust this if needed to allow requests from specific origins
+    allow_credentials=True,  # Allow credentials such as cookies or authorization headers
+    allow_methods=["*"],  # Allow all HTTP methods (GET, POST, etc.)
+    allow_headers=["*"],  # Allow all headers
+    expose_headers=["X-Request-ID"],  # Expose custom headers to the client
+)
+
+# Include routers for different endpoints
+app.include_router(openai_router)  # Router for OpenAI-related endpoints
+app.include_router(anthropic_router)  # Router for Anthropic-related endpoints
+
+# Set up logging for the application
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)  # Set the logging level to INFO
+
+# WebSocket endpoint to handle audio connections
+@app.websocket("/ws/audio")
+async def audio_websocket(websocket: WebSocket):
+    logger.debug("Attempting to connect WebSocket.")
+    try:
+        # Attempt to connect the WebSocket
+        await connection_manager.connect(websocket)
+        logger.info(f"WebSocket connection established: {websocket.client}")
+    except Exception as e:
+        # Log an error if the connection fails and close the WebSocket
+        logger.error(f"Failed to connect WebSocket: {e}")
+        await websocket.close()
+        logger.debug("WebSocket closed after failed connection attempt.")
+        return
+    
+    try:
+        # Keep the connection alive by sleeping in a loop
+        while True:
+            logger.debug("Sleeping for 1 second in WebSocket loop.")
+            await asyncio.sleep(1)
+    except WebSocketDisconnect:
+        # Handle WebSocket disconnection
+        connection_manager.disconnect(websocket)
+        logger.info(f"WebSocket connection closed: {websocket.client}")
+        logger.debug("WebSocketDisconnect exception caught and connection_manager notified.")
+
+# Entry point for running the application with Uvicorn
+if __name__ == '__main__':
+    import uvicorn
+    logger.debug("Starting the Uvicorn server.")
+    uvicorn.run(app, host='0.0.0.0', port=8000)  # Run the server on all available IP addresses, port 8000
+
+# File: /home/jack/ayyaihome/backend/init.py
+import os
+import threading
+import pyaudio
+from dotenv import load_dotenv
+from openai import AsyncOpenAI
+import anthropic  # Import the Anthropic SDK
+
+# Load environment variables from a .env file
+load_dotenv()
+
+# Initialize PyAudio for audio playback
+p = pyaudio.PyAudio()
+
+# Mapping between OpenAI response formats and PyAudio formats
+AUDIO_FORMAT_MAPPING = {
+    "pcm": pyaudio.paInt16,        # 16-bit PCM format for high-quality audio
+    "float": pyaudio.paFloat32,    # 32-bit Float PCM for more dynamic range
+    "int24": pyaudio.paInt24,      # 24-bit PCM for high-quality playback
+    "ogg-opus": None,              # Requires decoding for playback
+    "mp3": None,                   # Requires decoding for playback
+    "aac": None                    # Requires decoding for playback
+}
+
+# Audio configuration mapping for different formats
+AUDIO_CONFIG_MAPPING = {
+    "pcm": {
+        "AUDIO_FORMAT": pyaudio.paInt16,  # 16-bit PCM format
+        "RATE": 24000,  # Sampling rate in Hz
+        "CHANNELS": 1   # Mono channel
+    },
+    "float": {
+        "AUDIO_FORMAT": pyaudio.paFloat32,  # 32-bit Float PCM format
+        "RATE": 48000,  # Higher sampling rate for better quality
+        "CHANNELS": 1   # Mono channel
+    },
+    "int24": {
+        "AUDIO_FORMAT": pyaudio.paInt24,  # 24-bit PCM format
+        "RATE": 44100,  # Standard sampling rate for high-quality audio
+        "CHANNELS": 2   # Stereo channels
+    },
+    "ogg-opus": {
+        "AUDIO_FORMAT": None,  # Requires decoding before playback
+        "RATE": 48000,  # Sampling rate in Hz
+        "CHANNELS": 2   # Stereo channels
+    },
+    "mp3": {
+        "AUDIO_FORMAT": None,  # Requires decoding before playback
+        "RATE": 48000,  # Sampling rate in Hz
+        "CHANNELS": 2   # Stereo channels
+    },
+    "aac": {
+        "AUDIO_FORMAT": None,  # Requires decoding before playback
+        "RATE": 48000,  # Sampling rate in Hz
+        "CHANNELS": 2   # Stereo channels
+    }
+}
+
+# Shared Constants used across the application
+SHARED_CONSTANTS = {
+    "MINIMUM_PHRASE_LENGTH": 25,  # Minimum length of a phrase for processing
+    "TTS_CHUNK_SIZE": 1024,  # Chunk size for Text-to-Speech audio streaming
+    "DEFAULT_TTS_MODEL": "tts-1",  # Default Text-to-Speech model
+    "RESPONSE_FORMAT": "aac",  # Default audio response format
+    "AUDIO_FORMAT": AUDIO_FORMAT_MAPPING.get("pcm", pyaudio.paInt16),  # Default audio format
+    "CHANNELS": 1,  # Default number of audio channels (mono)
+    "RATE": 24000,  # Default sampling rate in Hz
+    "TTS_SPEED": 1.0,  # Speed of the Text-to-Speech playback
+    "TEMPERATURE": 1.0,  # Temperature parameter for response randomness
+    "TOP_P": 1.0,  # Top-p sampling parameter
+    "DELIMITERS": [".", "?", "!"],  # Sentence delimiters for splitting text
+    "FRONTEND_PLAYBACK": True  # Enable frontend playback via WebSocket
+}
+
+# OpenAI-specific constants
+OPENAI_CONSTANTS = {
+    **SHARED_CONSTANTS,
+    "DEFAULT_RESPONSE_MODEL": "gpt-4o-mini",  # Default OpenAI response model
+    "DEFAULT_VOICE": "alloy",  # Default voice for Text-to-Speech
+    "SYSTEM_PROMPT": {
+        "role": "system",
+        "content": "You are a dry but witty AI assistant in a group conversation that includes Claude (another AI assistant) and human users. Messages are prefixed to identify the users. Do not prefix your own messages."
+    }
+}
+
+# Anthropic-specific constants
+ANTHROPIC_CONSTANTS = {
+    **SHARED_CONSTANTS,
+    "DEFAULT_RESPONSE_MODEL": "claude-3-5-sonnet-20240620",  # Default Anthropic response model
+    "DEFAULT_VOICE": "onyx",  # Default voice for Anthropic Text-to-Speech
+    "SYSTEM_PROMPT": {
+        "role": "system",
+        "content": "You are dry, witty and unapologetic. You are in a group conversation that includes GPT (another AI assistant) and human users. Messages are prefixed to identify the users. Do not prefix your own messages."
+    }
+}
+
+# Function to update audio format settings
+def update_audio_format(new_format: str):
+    # Validate the new format against supported formats
+    if new_format not in AUDIO_CONFIG_MAPPING:
+        raise ValueError(f"Unsupported audio format: {new_format}")
+    # Retrieve configuration for the new format
+    config = AUDIO_CONFIG_MAPPING[new_format]
+    # Update shared constants with the new format settings
+    SHARED_CONSTANTS["RESPONSE_FORMAT"] = new_format
+    SHARED_CONSTANTS["AUDIO_FORMAT"] = config["AUDIO_FORMAT"]
+    SHARED_CONSTANTS["RATE"] = config["RATE"]
+    SHARED_CONSTANTS["CHANNELS"] = config["CHANNELS"]
+    # Print a note if the new format requires decoding
+    if new_format in ["ogg-opus", "mp3", "aac"]:
+        print(f"Note: {new_format.upper()} format requires decoding before playback.")
+
+# Initialize OpenAI API client with API key from environment variables
+aclient = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+# Initialize Anthropic API client with API key from environment variables
+anthropic_client = anthropic.AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+
+# Import and initialize ConnectionManager for WebSocket communication
+from websocket_manager import ConnectionManager
+connection_manager = ConnectionManager()
+
+# File: /home/jack/ayyaihome/backend/websocket_manager.py
+# /home/jack/ayyaihome/backend/websocket_manager.py
+from typing import Optional
+from fastapi import WebSocket
+import logging
+
+# Set up logging for the module
+logger = logging.getLogger(__name__)
+
+class ConnectionManager:
+    def __init__(self):
+        # Initialize with no active WebSocket connection
+        self.active_connection: Optional[WebSocket] = None
+
+    async def connect(self, websocket: WebSocket):
+        # Close any existing active connection before accepting a new one
+        if self.active_connection:
+            await self.active_connection.close()
+            logger.info(f"Closed previous connection: {self.active_connection.client}")
+        
+        # Accept the new WebSocket connection
+        await websocket.accept()
+        self.active_connection = websocket
+        logger.info(f"Client connected: {websocket.client}")
+
+    def disconnect(self, websocket: WebSocket):
+        # Set active_connection to None if the given websocket is the active one
+        if self.active_connection == websocket:
+            self.active_connection = None
+            logger.info(f"Client disconnected: {websocket.client}")
+
+    async def send_audio(self, data: bytes):
+        # Send audio data to the active WebSocket connection, if one exists
+        if self.active_connection:
+            try:
+                await self.active_connection.send_bytes(data)
+            except Exception as e:
+                # If an error occurs, log it and remove the active connection
+                self.active_connection = None
+                logger.error(f"Error sending audio data: {e}. Connection removed.")
+        else:
+            # Log a warning if there is no active connection to send data to
+            logger.warning("No active WebSocket connection to send audio.")
+
