@@ -1,9 +1,7 @@
-# /home/jack/ayyaihome/backend/services/audio_player.py
-
 import queue
 import threading
 import logging
-from init import p, stop_event, OPENAI_CONSTANTS
+from init import p, OPENAI_CONSTANTS
 
 # Configure logging
 logging.basicConfig(
@@ -42,7 +40,7 @@ def audio_player(audio_queue: queue.Queue):
 
         logger.info("Audio player thread started.")
 
-        while not stop_event.is_set():
+        while True:
             # Get the next chunk of audio data
             audio_data = audio_queue.get()
 

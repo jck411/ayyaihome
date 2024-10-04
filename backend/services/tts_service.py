@@ -1,9 +1,6 @@
-# /home/jack/ayyaihome/backend/services/tts_service.py
-
 import asyncio
 import logging
 import queue
-from threading import Event
 from init import aclient, SHARED_CONSTANTS, connection_manager, pyaudio
 
 # Configure logging
@@ -13,30 +10,33 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-async def process_streams(phrase_queue: asyncio.Queue, audio_queue: queue.Queue, tts_constants, stop_event: Event):
+# Main function to process audio streams based on configuration
+async def process_streams(phrase_queue: asyncio.Queue, audio_queue: queue.Queue, tts_constants):
     if SHARED_CONSTANTS.get("FRONTEND_PLAYBACK", False):
-        # Frontend playback via WebSocket
-        audio_sender_task = asyncio.create_task(audio_sender(audio_queue, stop_event))
-        await text_to_speech_processor(phrase_queue, audio_queue, tts_constants, stop_event)
-        audio_queue.put(None)
+        # If FRONTEND_PLAYBACK is enabled, send audio via WebSocket
+        audio_sender_task = asyncio.create_task(audio_sender(audio_queue))
+        await text_to_speech_processor(phrase_queue, audio_queue, tts_constants)
+        audio_queue.put(None)  # Signal the end of audio processing
         await audio_sender_task
     else:
-        # Backend audio playback
-        audio_player_task = asyncio.create_task(audio_player(audio_queue, tts_constants, stop_event))
-        await text_to_speech_processor(phrase_queue, audio_queue, tts_constants, stop_event)
-        audio_queue.put(None)
+        # If FRONTEND_PLAYBACK is not enabled, play audio locally
+        audio_player_task = asyncio.create_task(audio_player(audio_queue, tts_constants))
+        await text_to_speech_processor(phrase_queue, audio_queue, tts_constants)
+        audio_queue.put(None)  # Signal the end of audio processing
         await audio_player_task
 
-async def text_to_speech_processor(phrase_queue: asyncio.Queue, audio_queue: queue.Queue, tts_constants, stop_event: Event):
+# Function to process text-to-speech requests
+async def text_to_speech_processor(phrase_queue: asyncio.Queue, audio_queue: queue.Queue, tts_constants):
     try:
-        while not stop_event.is_set():
+        while True:
+            # Get the next phrase from the queue
             phrase = await phrase_queue.get()
             if phrase is None:
                 logger.info("Received stop signal. Exiting TTS processor.")
                 return
             try:
                 logger.info(f"Processing phrase: {phrase}")
-                # Process one phrase at a time
+                # Create a streaming response for the given phrase
                 async with aclient.audio.speech.with_streaming_response.create(
                     model=tts_constants["DEFAULT_TTS_MODEL"],
                     voice=tts_constants["DEFAULT_VOICE"],
@@ -45,26 +45,26 @@ async def text_to_speech_processor(phrase_queue: asyncio.Queue, audio_queue: que
                     response_format=tts_constants["RESPONSE_FORMAT"]
                 ) as response:
                     audio_data = b""
+                    # Iterate over the response chunks and accumulate audio data
                     async for audio_chunk in response.iter_bytes(tts_constants["TTS_CHUNK_SIZE"]):
-                        if stop_event.is_set():
-                            logger.info("Stop event detected. Terminating TTS processing.")
-                            return
                         audio_data += audio_chunk
-                    # Enqueue the audio data
+                    # Enqueue the audio data for further processing (playback or sending)
                     audio_queue.put(audio_data)
                     logger.info(f"Enqueued audio data for phrase.")
             except Exception as tts_error:
                 logger.error(f"TTS processing failed with error: {tts_error}")
-                audio_queue.put(None)
+                audio_queue.put(None)  # Signal an error occurred
                 break  # Exit on TTS error
     except Exception as e:
         logger.error(f"Error in text_to_speech_processor: {e}")
-        audio_queue.put(None)
+        audio_queue.put(None)  # Signal an error occurred
 
-async def audio_sender(audio_queue: queue.Queue, stop_event: Event):
+# Function to send audio data via WebSocket
+async def audio_sender(audio_queue: queue.Queue):
     try:
         logger.info("Audio sender started.")
-        while not stop_event.is_set():
+        while True:
+            # Get the next audio data from the queue (blocking call executed in a thread pool)
             audio_data = await asyncio.get_event_loop().run_in_executor(None, audio_queue.get)
             if audio_data is None:
                 logger.info("Audio sender ended.")
@@ -72,6 +72,7 @@ async def audio_sender(audio_queue: queue.Queue, stop_event: Event):
             if not audio_data:
                 # Skip sending empty audio data
                 continue
+            # Send audio data if there is an active WebSocket connection
             if connection_manager.active_connection:
                 await connection_manager.send_audio(audio_data)
             else:
@@ -79,7 +80,8 @@ async def audio_sender(audio_queue: queue.Queue, stop_event: Event):
     except Exception as e:
         logger.error(f"Error in audio_sender: {e}")
 
-async def audio_player(audio_queue: queue.Queue, tts_constants, stop_event: Event):
+# Function to play audio data locally using PyAudio
+async def audio_player(audio_queue: queue.Queue, tts_constants):
     try:
         logger.info("Backend audio player started.")
         # Initialize PyAudio
@@ -89,7 +91,8 @@ async def audio_player(audio_queue: queue.Queue, tts_constants, stop_event: Even
                         channels=tts_constants["CHANNELS"],
                         rate=tts_constants["RATE"],
                         output=True)
-        while not stop_event.is_set():
+        while True:
+            # Get the next audio data from the queue (blocking call executed in a thread pool)
             audio_data = await asyncio.get_event_loop().run_in_executor(None, audio_queue.get)
             if audio_data is None:
                 logger.info("Audio player ended.")
@@ -97,9 +100,9 @@ async def audio_player(audio_queue: queue.Queue, tts_constants, stop_event: Even
             if not audio_data:
                 # Skip empty audio data
                 continue
-            # Play the audio data
+            # Play the audio data using the PyAudio stream
             stream.write(audio_data)
-        # Clean up
+        # Clean up the audio stream and terminate PyAudio
         stream.stop_stream()
         stream.close()
         p.terminate()
