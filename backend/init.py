@@ -1,5 +1,4 @@
 import os
-import threading
 import pyaudio
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
@@ -11,45 +10,51 @@ load_dotenv()
 # Initialize PyAudio for audio playback
 p = pyaudio.PyAudio()
 
-# Mapping between OpenAI response formats and PyAudio formats
+# Mapping between OpenAI response formats and MIME types
 AUDIO_FORMAT_MAPPING = {
-    "pcm": pyaudio.paInt16,        # 16-bit PCM format for high-quality audio
-    "float": pyaudio.paFloat32,    # 32-bit Float PCM for more dynamic range
-    "int24": pyaudio.paInt24,      # 24-bit PCM for high-quality playback
-    "ogg-opus": None,              # Requires decoding for playback
-    "mp3": None,                   # Requires decoding for playback
-    "aac": None                    # Requires decoding for playback
+    "pcm": "audio/pcm",
+    "float": "audio/float",
+    "int24": "audio/int24",
+    "ogg-opus": "audio/ogg; codecs=opus",
+    "mp3": "audio/mpeg",
+    "aac": "audio/aac"
 }
 
 # Audio configuration mapping for different formats
 AUDIO_CONFIG_MAPPING = {
     "pcm": {
         "AUDIO_FORMAT": pyaudio.paInt16,  # 16-bit PCM format
+        "MIME_TYPE": AUDIO_FORMAT_MAPPING["pcm"],
         "RATE": 24000,  # Sampling rate in Hz
         "CHANNELS": 1   # Mono channel
     },
     "float": {
         "AUDIO_FORMAT": pyaudio.paFloat32,  # 32-bit Float PCM format
+        "MIME_TYPE": AUDIO_FORMAT_MAPPING["float"],
         "RATE": 48000,  # Higher sampling rate for better quality
         "CHANNELS": 1   # Mono channel
     },
     "int24": {
         "AUDIO_FORMAT": pyaudio.paInt24,  # 24-bit PCM format
+        "MIME_TYPE": AUDIO_FORMAT_MAPPING["int24"],
         "RATE": 44100,  # Standard sampling rate for high-quality audio
         "CHANNELS": 2   # Stereo channels
     },
     "ogg-opus": {
         "AUDIO_FORMAT": None,  # Requires decoding before playback
+        "MIME_TYPE": AUDIO_FORMAT_MAPPING["ogg-opus"],
         "RATE": 48000,  # Sampling rate in Hz
         "CHANNELS": 2   # Stereo channels
     },
     "mp3": {
         "AUDIO_FORMAT": None,  # Requires decoding before playback
+        "MIME_TYPE": AUDIO_FORMAT_MAPPING["mp3"],
         "RATE": 48000,  # Sampling rate in Hz
         "CHANNELS": 2   # Stereo channels
     },
     "aac": {
         "AUDIO_FORMAT": None,  # Requires decoding before playback
+        "MIME_TYPE": AUDIO_FORMAT_MAPPING["aac"],
         "RATE": 48000,  # Sampling rate in Hz
         "CHANNELS": 2   # Stereo channels
     }
@@ -58,24 +63,25 @@ AUDIO_CONFIG_MAPPING = {
 # Shared Constants used across the application
 SHARED_CONSTANTS = {
     "MINIMUM_PHRASE_LENGTH": 25,  # Minimum length of a phrase for processing
-    "TTS_CHUNK_SIZE": 1024,  # Chunk size for Text-to-Speech audio streaming
-    "DEFAULT_TTS_MODEL": "tts-1",  # Default Text-to-Speech model
-    "RESPONSE_FORMAT": "aac",  # Default audio response format
-    "AUDIO_FORMAT": AUDIO_FORMAT_MAPPING.get("pcm", pyaudio.paInt16),  # Default audio format
-    "CHANNELS": 1,  # Default number of audio channels (mono)
-    "RATE": 24000,  # Default sampling rate in Hz
-    "TTS_SPEED": 1.0,  # Speed of the Text-to-Speech playback
-    "TEMPERATURE": 1.0,  # Temperature parameter for response randomness
-    "TOP_P": 1.0,  # Top-p sampling parameter
-    "DELIMITERS": [".", "?", "!"],  # Sentence delimiters for splitting text
-    "FRONTEND_PLAYBACK": True  # Enable frontend playback via WebSocket
+    "TTS_CHUNK_SIZE": 1024,        # Chunk size for Text-to-Speech audio streaming
+    "DEFAULT_TTS_MODEL": "tts-1",   # Default Text-to-Speech model
+    "RESPONSE_FORMAT": "aac",       # Default audio response format (initially set to AAC)
+    "AUDIO_FORMAT": AUDIO_CONFIG_MAPPING["aac"]["AUDIO_FORMAT"],  # Default audio format
+    "MIME_TYPE": AUDIO_CONFIG_MAPPING["aac"]["MIME_TYPE"],        # Default MIME type
+    "CHANNELS": AUDIO_CONFIG_MAPPING["aac"]["CHANNELS"],          # Default number of audio channels (stereo)
+    "RATE": AUDIO_CONFIG_MAPPING["aac"]["RATE"],                  # Default sampling rate in Hz (48000 for AAC)
+    "TTS_SPEED": 1.0,               # Speed of the Text-to-Speech playback
+    "TEMPERATURE": 1.0,             # Temperature parameter for response randomness
+    "TOP_P": 1.0,                    # Top-p sampling parameter
+    "DELIMITERS": [".", "?", "!"],   # Sentence delimiters for splitting text
+    "FRONTEND_PLAYBACK": True        # Enable frontend playback via WebSocket
 }
 
 # OpenAI-specific constants
 OPENAI_CONSTANTS = {
     **SHARED_CONSTANTS,
     "DEFAULT_RESPONSE_MODEL": "gpt-4o-mini",  # Default OpenAI response model
-    "DEFAULT_VOICE": "alloy",  # Default voice for Text-to-Speech
+    "DEFAULT_VOICE": "alloy",                 # Default voice for Text-to-Speech
     "SYSTEM_PROMPT": {
         "role": "system",
         "content": "You are a dry but witty AI assistant in a group conversation that includes Claude (another AI assistant) and human users. Messages are prefixed to identify the users. Do not prefix your own messages."
@@ -86,7 +92,7 @@ OPENAI_CONSTANTS = {
 ANTHROPIC_CONSTANTS = {
     **SHARED_CONSTANTS,
     "DEFAULT_RESPONSE_MODEL": "claude-3-5-sonnet-20240620",  # Default Anthropic response model
-    "DEFAULT_VOICE": "onyx",  # Default voice for Anthropic Text-to-Speech
+    "DEFAULT_VOICE": "onyx",                                 # Default voice for Anthropic Text-to-Speech
     "SYSTEM_PROMPT": {
         "role": "system",
         "content": "You are dry, witty and unapologetic. You are in a group conversation that includes GPT (another AI assistant) and human users. Messages are prefixed to identify the users. Do not prefix your own messages."
@@ -103,11 +109,18 @@ def update_audio_format(new_format: str):
     # Update shared constants with the new format settings
     SHARED_CONSTANTS["RESPONSE_FORMAT"] = new_format
     SHARED_CONSTANTS["AUDIO_FORMAT"] = config["AUDIO_FORMAT"]
+    SHARED_CONSTANTS["MIME_TYPE"] = config["MIME_TYPE"]
     SHARED_CONSTANTS["RATE"] = config["RATE"]
     SHARED_CONSTANTS["CHANNELS"] = config["CHANNELS"]
     # Print a note if the new format requires decoding
     if new_format in ["ogg-opus", "mp3", "aac"]:
         print(f"Note: {new_format.upper()} format requires decoding before playback.")
+    
+    # Debug print of updated shared constants (optional)
+    print(f"Updated format: {new_format}")
+    print(f"MIME Type: {SHARED_CONSTANTS['MIME_TYPE']}")
+    print(f"Channels: {SHARED_CONSTANTS['CHANNELS']}")
+    print(f"Sample Rate: {SHARED_CONSTANTS['RATE']} Hz")
 
 # Initialize OpenAI API client with API key from environment variables
 aclient = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))

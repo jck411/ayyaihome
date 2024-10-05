@@ -4,7 +4,8 @@ from endpoints.openai import openai_router
 from endpoints.anthropic import anthropic_router
 import asyncio
 import logging
-from init import connection_manager
+from init import connection_manager, SHARED_CONSTANTS, update_audio_format  # Added update_audio_format import
+import json  # Added import for JSON handling
 
 # Initialize the FastAPI app
 app = FastAPI()
@@ -31,10 +32,28 @@ logger.setLevel(logging.INFO)  # Set the logging level to INFO
 @app.websocket("/ws/audio")
 async def audio_websocket(websocket: WebSocket):
     logger.debug("Attempting to connect WebSocket.")
+    
     try:
+        # **Call to update the audio format before establishing connection** #THIS IS WHERE YOU CHANGE THE FORMAT FOR AUDIO
+        update_audio_format("ogg-opus")  # Change to "mp3", "aac", or "ogg-opus" as needed
+        
         # Attempt to connect the WebSocket
         await connection_manager.connect(websocket)
         logger.info(f"WebSocket connection established: {websocket.client}")
+        
+        # **Begin Modification: Send Audio Format Information as Binary Message**
+        # Create a JSON message with the audio format
+        format_info = {
+            "type": "format",
+            "format": SHARED_CONSTANTS.get("MIME_TYPE", "audio/mpeg")  # Default to 'audio/mpeg' if MIME_TYPE not set
+        }
+        format_message = json.dumps(format_info).encode('utf-8')  # Encode JSON to bytes
+        
+        # Send the format message as a binary message over WebSocket
+        await connection_manager.send_audio(format_message)
+        logger.info(f"Sent audio format information: {format_info['format']}")
+        # **End Modification**
+        
     except Exception as e:
         # Log an error if the connection fails and close the WebSocket
         logger.error(f"Failed to connect WebSocket: {e}")
