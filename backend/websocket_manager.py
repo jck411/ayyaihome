@@ -1,4 +1,5 @@
-# /home/jack/ayyaihome/backend/websocket_manager.py
+# backend/websocket_manager.py
+
 from typing import Optional
 from fastapi import WebSocket
 import logging

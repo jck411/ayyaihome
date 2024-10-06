@@ -15,7 +15,9 @@ const MessageInput = ({ input, setInput, sendMessage, darkMode }) => {
       setInput(transcript); // Update the input box with the recognized speech
       setSendOnInput(true); // Set flag to send the message
       if (audioRef.current) {
-        audioRef.current.play(); // Play the sound when speech is recognized
+        audioRef.current.play().catch((error) => {
+          console.error('Failed to play submit sound:', error);
+        }); // Play the sound when speech is recognized
       }
     } else {
       console.log("Speech was not recognized."); // Log if the speech was not recognized
@@ -44,7 +46,7 @@ const MessageInput = ({ input, setInput, sendMessage, darkMode }) => {
   }, [sendOnInput, input, sendMessage, setInput]);
 
   // Handle manual message sending via the input field
-  const handleSendMessage = (e) => {
+  const handleSendMessage = useCallback((e) => {
     e.preventDefault(); // Prevent the default form submission behavior
     if (input.trim()) {
       sendMessage(); // Send the message using the current input state
@@ -53,16 +55,16 @@ const MessageInput = ({ input, setInput, sendMessage, darkMode }) => {
         textareaRef.current.style.height = 'auto'; // Reset height after sending
       }
     }
-  };
+  }, [input, sendMessage, setInput]);
 
   // Toggle the microphone listening state
-  const toggleListening = () => {
+  const toggleListening = useCallback(() => {
     if (isListening) {
       stopListening(); // Stop listening if it's already active
     } else {
       startListening(); // Start listening for speech-to-text
     }
-  };
+  }, [isListening, startListening, stopListening]);
 
   return (
     <div className="bg-inherit p-4">
