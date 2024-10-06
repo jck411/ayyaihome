@@ -1,3 +1,5 @@
+#/home/jack/ayyaihome/backend/init.py
+
 import os
 import pyaudio
 from dotenv import load_dotenv

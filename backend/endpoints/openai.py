@@ -6,21 +6,23 @@ import logging
 from init import OPENAI_CONSTANTS, aclient
 from services.tts_service import process_streams
 from services.audio_player import find_next_phrase_end
+from services.tts_manager import tts_manager  # Import TTSManager
 
-# Configure logging to log messages with INFO level and above
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Create a FastAPI router instance
 openai_router = APIRouter()
 
 @openai_router.post("/api/openai")
 async def openai_stream(request: Request):
     """
     Handles POST requests to the "/api/openai" endpoint.
+    Ensures any active TTS process is stopped before handling a new request.
     """
     try:
         logger.info("Received request at /api/openai")
+        # Stop any active TTS tasks before handling the new request
+        await tts_manager.stop_active_tts()
+
         # Parse incoming JSON data from the request
         data = await request.json()
         logger.info(f"Request data: {data}")
@@ -43,7 +45,8 @@ async def openai_stream(request: Request):
             logger.info("Initialized phrase and audio queues")
 
             # Start the TTS processing task with required arguments
-            asyncio.create_task(process_streams(phrase_queue, audio_queue, OPENAI_CONSTANTS))
+            tts_task = asyncio.create_task(process_streams(phrase_queue, audio_queue, OPENAI_CONSTANTS))
+            tts_manager.register_task(tts_task)
             logger.info("Started TTS processing task")
 
         # Return a streaming response and pass the phrase queue to handle TTS
@@ -58,19 +61,20 @@ async def openai_stream(request: Request):
         logger.error(f"Error in openai_stream: {e}")
         return {"error": f"Unexpected error: {str(e)}"}
 
+
 async def stream_completion(messages: list, phrase_queue: asyncio.Queue, model: str = OPENAI_CONSTANTS["DEFAULT_RESPONSE_MODEL"]):
     """
     Streams the response from the OpenAI API.
     """
     try:
-        logger.info("Starting stream_completion")
+        logger.info("Starting stream_completion from OpenAI API")
         # Send the request to the OpenAI API to generate a completion
         response = await aclient.chat.completions.create(
             model=model,
             messages=messages,
             stream=True,
             temperature=OPENAI_CONSTANTS["TEMPERATURE"],
-            top_p=OPENAI_CONSTANTS["TOP_P"],
+            top_p=OPENAI_CONSTANTS["TOP_P"]
         )
         logger.info("Received response from OpenAI API")
 
@@ -82,7 +86,7 @@ async def stream_completion(messages: list, phrase_queue: asyncio.Queue, model: 
             content = getattr(chunk.choices[0].delta, 'content', "") if chunk.choices else ""
 
             if content:
-                logger.info(f"Streaming content: {content}")
+                logger.debug(f"Streaming content: {content}")
                 yield content  # Stream content back to the client
                 working_string += content
 
@@ -162,6 +166,5 @@ async def stream_completion(messages: list, phrase_queue: asyncio.Queue, model: 
         # Handle exceptions and ensure the phrase queue ends properly
         if phrase_queue:
             await phrase_queue.put(None)
-            logger.error(f"Error in stream_completion: {e}, queued None to indicate end of TTS")
         yield f"Error: {e}"
         logger.error(f"Yielding error: {e}")
