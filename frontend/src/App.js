@@ -1,5 +1,3 @@
-// src/App.js
-
 import React, { useState, useEffect, useCallback } from 'react';
 import Sidebar from './components/Sidebar';
 import StatusBar from './components/StatusBar';
@@ -193,6 +191,7 @@ const App = () => {
           setInput={setInput} // Function to set input value
           sendMessage={handleSendMessage} // Send message without stopping TTS
           darkMode={darkMode} // Dark mode state
+          stopCurrentTTS={stopCurrentTTS} // Added stopCurrentTTS prop
         />
       </div>
 

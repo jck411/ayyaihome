@@ -1,10 +1,9 @@
 // src/components/MessageInput.js
-
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { Send, Mic, MicOff } from 'lucide-react';
 import useSpeechToText from '../hooks/useSpeechToText';
 
-const MessageInput = ({ input, setInput, sendMessage, darkMode }) => {
+const MessageInput = ({ input, setInput, sendMessage, darkMode, stopCurrentTTS }) => {
   const [sendOnInput, setSendOnInput] = useState(false); // Flag to trigger sending a message when speech is recognized
   const textareaRef = useRef(null); // Reference for the textarea element
   const audioRef = useRef(null); // Reference for the audio element
@@ -12,6 +11,7 @@ const MessageInput = ({ input, setInput, sendMessage, darkMode }) => {
   // Callback when speech is recognized
   const handleResult = useCallback((transcript) => {
     if (transcript !== "Speech not recognized.") {
+      stopCurrentTTS(); // Stop any ongoing TTS
       setInput(transcript); // Update the input box with the recognized speech
       setSendOnInput(true); // Set flag to send the message
       if (audioRef.current) {
@@ -22,7 +22,7 @@ const MessageInput = ({ input, setInput, sendMessage, darkMode }) => {
     } else {
       console.log("Speech was not recognized."); // Log if the speech was not recognized
     }
-  }, [setInput]);
+  }, [stopCurrentTTS, setInput]);
 
   // Callback when an error occurs in Speech-to-Text (STT)
   const handleError = useCallback((error) => {
