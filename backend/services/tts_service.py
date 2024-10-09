@@ -97,17 +97,11 @@ async def audio_sender(audio_queue: queue.Queue):
             if not audio_data:
                 # Skip sending empty audio data
                 continue
-            # Send audio data if there is an active WebSocket connection
-            if connection_manager.active_connection:
-                await connection_manager.send_audio(audio_data)
-            else:
-                logger.warning("No active WebSocket connection to send audio.")
+            # Send audio data via ConnectionManager
+            await connection_manager.send_audio(audio_data)
     except asyncio.CancelledError:
         logger.info("audio_sender was cancelled.")
         raise
     except Exception as e:
         logger.error(f"Error in audio_sender: {e}")
         audio_queue.put(None)  # Signal an error occurred
-
-# The start_audio_player function is already used above
-# It runs in a separate thread and does not need to be awaited here

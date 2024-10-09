@@ -1,3 +1,5 @@
+// /home/jack/ayyaihome/frontend/src/App.js
+
 import React, { useState, useEffect, useCallback } from 'react';
 import Sidebar from './components/Sidebar';
 import StatusBar from './components/StatusBar';
@@ -5,6 +7,7 @@ import MessageList from './components/MessageList';
 import MessageInput from './components/MessageInput';
 import { useMessageLogic } from './MessageLogic';
 import useAudioPlayer from './hooks/useAudioPlayer'; // Import the useAudioPlayer hook
+import KeywordListener from './components/KeywordListener'; // Import the KeywordListener component
 
 const App = () => {
   // Destructure the values from the useMessageLogic hook, which handles most of the app's logic
@@ -183,6 +186,9 @@ const App = () => {
           </div>
         </div>
       </div>
+
+      {/* Keyword Listener */}
+      <KeywordListener />  {/* Added KeywordListener component */}
 
       {/* Footer */}
       <div className="fixed bottom-0 left-0 right-0 z-40">

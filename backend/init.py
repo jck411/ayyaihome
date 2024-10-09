@@ -1,10 +1,12 @@
-#/home/jack/ayyaihome/backend/init.py
+# /home/jack/ayyaihome/backend/init.py
 
 import os
 import pyaudio
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
 import anthropic  # Import the Anthropic SDK
+import asyncio
+from websocket_manager import ConnectionManager
 
 # Load environment variables from a .env file
 load_dotenv()
@@ -130,6 +132,13 @@ aclient = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 # Initialize Anthropic API client with API key from environment variables
 anthropic_client = anthropic.AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
-# Import and initialize ConnectionManager for WebSocket communication
-from websocket_manager import ConnectionManager
+# Initialize ConnectionManager for WebSocket communication
 connection_manager = ConnectionManager()
+
+# Get the main event loop
+try:
+    loop = asyncio.get_event_loop()
+except RuntimeError:
+    # If there's no running event loop in the current thread, create a new one
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
