@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { generateAIResponse } from './services/openaiService';
 import { generateAnthropicResponse } from './services/anthropicService';
 
@@ -12,9 +12,14 @@ export const useMessageLogic = () => {
   // State to track which API is selected (openai or anthropic)
   const [selectedAPI, setSelectedAPI] = useState('openai');
   // State to track the logged-in user
-  const [loggedInUser, setLoggedInUser] = useState('guest');
+  const [loggedInUser, setLoggedInUser] = useState('guest'); // <-- Keep the login logic here
   // State to track whether TTS (Text-to-Speech) is enabled
   const [ttsEnabled, setTtsEnabled] = useState(true);
+
+  // Function to handle user login
+  const onLogin = useCallback((user) => {
+    setLoggedInUser(user);  // <-- Expose this function to handle login
+  }, []);
 
   // Function to send a message and handle the API response
   const sendMessage = async () => {
@@ -100,8 +105,9 @@ export const useMessageLogic = () => {
     sendMessage,
     selectedAPI,
     setSelectedAPI,
-    setLoggedInUser,
-    ttsEnabled,           // Expose TTS toggle state
-    setTtsEnabled         // Expose function to toggle TTS
+    loggedInUser,  // <-- Expose the logged-in user
+    onLogin,       // <-- Expose the login handler
+    ttsEnabled,
+    setTtsEnabled
   };
 };

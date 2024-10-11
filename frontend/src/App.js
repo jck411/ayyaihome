@@ -1,5 +1,3 @@
-// Refactored App.js with modularized hooks
-
 import React, { useState, useEffect, useCallback } from 'react';
 import Sidebar from './components/Sidebar';
 import StatusBar from './components/StatusBar';
@@ -10,6 +8,7 @@ import useAudioPlayer from './hooks/useAudioPlayer'; // Import the useAudioPlaye
 import KeywordListener from './components/KeywordListener'; // Import the KeywordListener component
 import useWebSocket from './hooks/useWebSocket'; // Import the WebSocket hook
 import useDarkMode from './hooks/useDarkMode'; // Import the useDarkMode hook
+import useMessagePaneResizer from './hooks/useMessagePaneResizer'; // Import the useMessagePaneResizer hook
 
 const App = () => {
   // Destructure the values from the useMessageLogic hook, which handles most of the app's logic
@@ -21,7 +20,8 @@ const App = () => {
     sendMessage,
     selectedAPI,
     setSelectedAPI,
-    setLoggedInUser,
+    loggedInUser,
+    onLogin,
     ttsEnabled,
     setTtsEnabled
   } = useMessageLogic();
@@ -31,10 +31,6 @@ const App = () => {
 
   // State to manage whether the sidebar is open
   const [isSidebarOpen, setSidebarOpen] = useState(false);
-  // State to manage the width of the left pane in the chat area
-  const [leftWidth, setLeftWidth] = useState(30);
-  // State to manage the logged-in user details
-  const [loggedInUser, setLoggedInUserState] = useState(null);
   // State to track if user has interacted with the page
   const [userInteracted, setUserInteracted] = useState(false);
 
@@ -44,14 +40,11 @@ const App = () => {
   // Initialize WebSocket using the custom hook
   const { message, isConnected } = useWebSocket('ws://your-websocket-url');
 
-  // Function to handle user login, updating both local and message logic state
-  const onLogin = useCallback((user) => {
-    setLoggedInUserState(user);
-    setLoggedInUser(user);  // Set logged in user from logic
-  }, [setLoggedInUser]);
-
   // Toggle the sidebar's visibility
   const toggleSidebar = useCallback(() => setSidebarOpen(prev => !prev), []);
+
+  // Pane resizing logic now managed by useMessagePaneResizer
+  const { leftWidth, handleMouseDown } = useMessagePaneResizer();
 
   // Effect to handle the Shift key press to stop TTS
   const handleKeyDown = useCallback((event) => {
@@ -91,30 +84,6 @@ const App = () => {
     };
   }, []);
 
-  // Function to handle dragging the middle cursor to resize the message list panes
-  const handleDrag = useCallback((e) => {
-    // Calculate the offset for the draggable container
-    const containerOffset = (window.innerWidth - 950) / 2;
-    // Calculate new width as a percentage of the container's width
-    const newLeftWidth = ((e.clientX - containerOffset) / 950) * 100;
-    // Set new width if within acceptable bounds (20% to 80%)
-    if (newLeftWidth > 20 && newLeftWidth < 80) {
-      setLeftWidth(newLeftWidth);
-    }
-  }, []);
-
-  // Function to handle the end of dragging
-  const handleDragEnd = useCallback(() => {
-    document.removeEventListener('mousemove', handleDrag);
-    document.removeEventListener('mouseup', handleDragEnd);
-  }, [handleDrag]);
-
-  // Function to start the dragging process
-  const handleMouseDown = useCallback(() => {
-    document.addEventListener('mousemove', handleDrag);
-    document.addEventListener('mouseup', handleDragEnd);
-  }, [handleDrag, handleDragEnd]);
-
   // Function to scroll to a specific AI message by ID
   const scrollToAIMessage = useCallback((id) => {
     const element = document.getElementById(`ai-message-${id}`);
@@ -146,7 +115,7 @@ const App = () => {
       <div className="fixed top-0 left-0 right-0 z-40">
         <StatusBar
           status={status} // Current status from message logic
-          onLogin={onLogin} // Login handler
+          onLogin={onLogin} // Login handler from message logic
           loggedInUser={loggedInUser} // Currently logged-in user
           darkMode={darkMode} // Dark mode state
           toggleDarkMode={toggleDarkMode} // Function to toggle dark mode
