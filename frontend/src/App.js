@@ -1,4 +1,4 @@
-// Refactored App.js to move WebSocket management to a separate file
+// Refactored App.js with modularized hooks
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Sidebar from './components/Sidebar';
@@ -9,6 +9,7 @@ import { useMessageLogic } from './MessageLogic';
 import useAudioPlayer from './hooks/useAudioPlayer'; // Import the useAudioPlayer hook
 import KeywordListener from './components/KeywordListener'; // Import the KeywordListener component
 import useWebSocket from './hooks/useWebSocket'; // Import the WebSocket hook
+import useDarkMode from './hooks/useDarkMode'; // Import the useDarkMode hook
 
 const App = () => {
   // Destructure the values from the useMessageLogic hook, which handles most of the app's logic
@@ -25,8 +26,9 @@ const App = () => {
     setTtsEnabled
   } = useMessageLogic();
 
-  // State to manage dark mode
-  const [darkMode, setDarkMode] = useState(true);
+  // Dark mode management
+  const { darkMode, toggleDarkMode } = useDarkMode();
+
   // State to manage whether the sidebar is open
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   // State to manage the width of the left pane in the chat area
@@ -48,20 +50,8 @@ const App = () => {
     setLoggedInUser(user);  // Set logged in user from logic
   }, [setLoggedInUser]);
 
-  // Toggle between dark and light mode
-  const toggleDarkMode = useCallback(() => setDarkMode(prev => !prev), []);
-
   // Toggle the sidebar's visibility
   const toggleSidebar = useCallback(() => setSidebarOpen(prev => !prev), []);
-
-  // Effect to add or remove the dark mode class from the body element
-  useEffect(() => {
-    if (darkMode) {
-      document.body.classList.add('dark-mode');
-    } else {
-      document.body.classList.remove('dark-mode');
-    }
-  }, [darkMode]);
 
   // Effect to handle the Shift key press to stop TTS
   const handleKeyDown = useCallback((event) => {
