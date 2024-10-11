@@ -1,14 +1,18 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React from 'react';
 import Sidebar from './components/Sidebar';
 import StatusBar from './components/StatusBar';
 import MessageList from './components/MessageList';
 import MessageInput from './components/MessageInput';
 import { useMessageLogic } from './MessageLogic';
-import useAudioPlayer from './hooks/useAudioPlayer'; // Import the useAudioPlayer hook
-import KeywordListener from './components/KeywordListener'; // Import the KeywordListener component
-import useWebSocket from './hooks/useWebSocket'; // Import the WebSocket hook
-import useDarkMode from './hooks/useDarkMode'; // Import the useDarkMode hook
-import useMessagePaneResizer from './hooks/useMessagePaneResizer'; // Import the useMessagePaneResizer hook
+import useAudioPlayer from './hooks/useAudioPlayer';
+import KeywordListener from './components/KeywordListener';
+import useWebSocket from './hooks/useWebSocket';
+import useDarkMode from './hooks/useDarkMode';
+import useMessagePaneResizer from './hooks/useMessagePaneResizer';
+import useSidebarState from './hooks/useSidebarState';
+import useUserInteractionTracker from './hooks/useUserInteractionTracker';
+import useShiftKeyHandler from './hooks/useShiftKeyHandler';
+import useScrollToMessage from './hooks/useScrollToMessage';
 
 const App = () => {
   // Destructure the values from the useMessageLogic hook, which handles most of the app's logic
@@ -29,73 +33,31 @@ const App = () => {
   // Dark mode management
   const { darkMode, toggleDarkMode } = useDarkMode();
 
-  // State to manage whether the sidebar is open
-  const [isSidebarOpen, setSidebarOpen] = useState(false);
-  // State to track if user has interacted with the page
-  const [userInteracted, setUserInteracted] = useState(false);
+  // Sidebar state management
+  const { isSidebarOpen, toggleSidebar } = useSidebarState();
+
+  // User interaction tracking
+  const { userInteracted, setUserInteracted } = useUserInteractionTracker();
 
   // Initialize the audio player using the custom hook and get control functions
-  const { stopCurrentTTS, isTTSPlaying } = useAudioPlayer(userInteracted); // Pass userInteracted state to control audio playback
+  const { stopCurrentTTS, isTTSPlaying } = useAudioPlayer(userInteracted);
 
   // Initialize WebSocket using the custom hook
   const { message, isConnected } = useWebSocket('ws://your-websocket-url');
 
-  // Toggle the sidebar's visibility
-  const toggleSidebar = useCallback(() => setSidebarOpen(prev => !prev), []);
-
   // Pane resizing logic now managed by useMessagePaneResizer
   const { leftWidth, handleMouseDown } = useMessagePaneResizer();
 
-  // Effect to handle the Shift key press to stop TTS
-  const handleKeyDown = useCallback((event) => {
-    if (event.key === "Shift") {
-      if (isTTSPlaying) {
-        stopCurrentTTS();  // Stop TTS when Shift key is pressed
-        console.log('Stopping TTS via Shift key');
-      }
-    }
-  }, [stopCurrentTTS, isTTSPlaying]);
+  // Shift key handler for stopping TTS
+  useShiftKeyHandler(stopCurrentTTS, isTTSPlaying);
 
-  useEffect(() => {
-    window.addEventListener("keydown", handleKeyDown);
-
-    // Cleanup the event listener when the component unmounts
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [handleKeyDown]);
-
-  // Effect to listen for any user interaction to allow audio playback
-  useEffect(() => {
-    const handleUserInteraction = () => {
-      setUserInteracted(true);
-      window.removeEventListener('click', handleUserInteraction);
-      window.removeEventListener('keydown', handleUserInteraction);
-    };
-
-    // Add event listeners for user interaction
-    window.addEventListener('click', handleUserInteraction);
-    window.addEventListener('keydown', handleUserInteraction);
-
-    // Cleanup the event listeners
-    return () => {
-      window.removeEventListener('click', handleUserInteraction);
-      window.removeEventListener('keydown', handleUserInteraction);
-    };
-  }, []);
-
-  // Function to scroll to a specific AI message by ID
-  const scrollToAIMessage = useCallback((id) => {
-    const element = document.getElementById(`ai-message-${id}`);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-  }, []);
+  // Scroll to message logic
+  const { scrollToAIMessage } = useScrollToMessage();
 
   // Function to handle sending a message without stopping TTS
-  const handleSendMessage = useCallback(() => {
-    sendMessage(); 
-  }, [sendMessage]);
+  const handleSendMessage = () => {
+    sendMessage();
+  };
 
   return (
     <div className={`min-h-screen w-full`} onClick={() => setUserInteracted(true)}> {/* Mark user interaction */}
