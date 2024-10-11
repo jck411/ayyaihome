@@ -1,4 +1,4 @@
-// /home/jack/ayyaihome/frontend/src/App.js
+// Refactored App.js to move WebSocket management to a separate file
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Sidebar from './components/Sidebar';
@@ -8,6 +8,7 @@ import MessageInput from './components/MessageInput';
 import { useMessageLogic } from './MessageLogic';
 import useAudioPlayer from './hooks/useAudioPlayer'; // Import the useAudioPlayer hook
 import KeywordListener from './components/KeywordListener'; // Import the KeywordListener component
+import useWebSocket from './hooks/useWebSocket'; // Import the WebSocket hook
 
 const App = () => {
   // Destructure the values from the useMessageLogic hook, which handles most of the app's logic
@@ -37,6 +38,9 @@ const App = () => {
 
   // Initialize the audio player using the custom hook and get control functions
   const { stopCurrentTTS, isTTSPlaying } = useAudioPlayer(userInteracted); // Pass userInteracted state to control audio playback
+
+  // Initialize WebSocket using the custom hook
+  const { message, isConnected } = useWebSocket('ws://your-websocket-url');
 
   // Function to handle user login, updating both local and message logic state
   const onLogin = useCallback((user) => {
@@ -207,10 +211,10 @@ const App = () => {
           onClick={stopCurrentTTS}
           className={`${
             isTTSPlaying ? 'bg-red-500 hover:bg-red-600' : 'bg-gray-400 cursor-not-allowed'
-          } text-white p-3 rounded-full shadow-lg focus:outline-none transition-colors duration-300`}
+          } text-white p-3`}
           aria-label="Stop TTS"
           title="Stop TTS"
-          disabled={!isTTSPlaying} // Disable button if TTS is not playing
+          disabled={!isTTSPlaying}
         >
           {/* "X" Icon */}
           <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none"

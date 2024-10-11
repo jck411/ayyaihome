@@ -1,14 +1,17 @@
 // /home/jack/ayyaihome/frontend/src/hooks/useWebSocket.js
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 
 const useWebSocket = (url) => {
   const [message, setMessage] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
   const websocketRef = useRef(null);
 
-  useEffect(() => {
-    // Create a new WebSocket connection when the component mounts
+  // Function to connect to the WebSocket
+  const connectWebSocket = useCallback(() => {
+    if (!url) return;
+    
+    // Create a new WebSocket connection
     websocketRef.current = new WebSocket(url);
 
     // WebSocket open event
@@ -33,6 +36,11 @@ const useWebSocket = (url) => {
     websocketRef.current.onerror = (error) => {
       console.error("WebSocket error:", error);
     };
+  }, [url]);
+
+  // Effect to manage the WebSocket connection lifecycle
+  useEffect(() => {
+    connectWebSocket();
 
     // Cleanup function to close WebSocket connection when component unmounts
     return () => {
@@ -40,9 +48,19 @@ const useWebSocket = (url) => {
         websocketRef.current.close();
       }
     };
-  }, [url]);
+  }, [connectWebSocket]);
 
-  return { message, isConnected };
+  // Function to send a message through the WebSocket
+  const sendMessage = useCallback((msg) => {
+    if (websocketRef.current && isConnected) {
+      websocketRef.current.send(msg);
+      console.log("Message sent to WebSocket:", msg);
+    } else {
+      console.warn("Cannot send message, WebSocket is not connected.");
+    }
+  }, [isConnected]);
+
+  return { message, isConnected, sendMessage };
 };
 
 export default useWebSocket;
