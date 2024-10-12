@@ -1,5 +1,3 @@
-//home/jack/ayyaihome/frontend/src/components/StatusBar.js
-
 import React from 'react';
 import ModeToggle from './ModeToggle';
 import { FiMenu } from 'react-icons/fi';
@@ -12,8 +10,10 @@ const StatusBar = ({
   toggleDarkMode,
   toggleSidebar
 }) => {
+  const users = ['Jack', 'Sanja', 'Guest'];
+
   return (
-    <div className="flex items-center justify-between w-full space-x-4 overflow-x-auto bg-inherit p-4">
+    <div className="flex items-center justify-between w-full bg-inherit p-4 fixed top-0 left-0 right-0 z-40">
       {/* Left side with Sidebar toggle and User logins */}
       <div className="flex items-center space-x-4">
         {/* Sidebar toggle icon */}
@@ -22,40 +22,25 @@ const StatusBar = ({
         </div>
 
         {/* User login buttons */}
-        <span
-          onClick={() => onLogin('Jack')}
-          className={`cursor-pointer px-2 py-1 ${
-            loggedInUser === 'Jack' ? 'bg-contrast-orange text-white' : 'text-contrast-orange'
-          }`}
-          style={{ fontWeight: 'bold' }}
-        >
-          Jack
-        </span>
-
-        <span
-          onClick={() => onLogin('Sanja')}
-          className={`cursor-pointer px-2 py-1 ${
-            loggedInUser === 'Sanja' ? 'bg-contrast-orange text-white' : 'text-contrast-orange'
-          }`}
-          style={{ fontWeight: 'bold' }}
-        >
-          Sanja
-        </span>
-
-        <span
-          onClick={() => onLogin('Guest')}
-          className={`cursor-pointer px-2 py-1 ${
-            loggedInUser === 'Guest' ? 'bg-contrast-orange text-white' : 'text-contrast-orange'
-          }`}
-          style={{ fontWeight: 'bold' }}
-        >
-          Guest
-        </span>
+        {users.map((user) => (
+          <span
+            key={user}
+            onClick={() => onLogin(user)}
+            className={`cursor-pointer px-2 py-1 ${
+              loggedInUser === user ? 'bg-contrast-orange text-white' : 'text-contrast-orange'
+            }`}
+            style={{ fontWeight: 'bold' }}
+          >
+            {user}
+          </span>
+        ))}
       </div>
 
       {/* Right side with Online status and ModeToggle */}
       <div className="flex items-center space-x-4">
-        <span className="text-lg font-bold text-contrast-orange whitespace-nowrap">Online</span>
+        <span className="text-lg font-bold text-contrast-orange whitespace-nowrap">
+          {status === 'connected' ? 'Online' : 'Offline'}
+        </span>
         <ModeToggle darkMode={darkMode} toggleDarkMode={toggleDarkMode} />
       </div>
     </div>
