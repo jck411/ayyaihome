@@ -18,6 +18,7 @@ const useAudioPlayer = (userInteracted) => {
   const wsRef = useRef(null); // Reference to WebSocket
   const [isTTSPlaying, setIsTTSPlaying] = useState(false); // State to track TTS status
   const isIntentionalStopRef = useRef(false); // Flag to indicate intentional stop
+  const [isConnected, setIsConnected] = useState(false); // State to track WebSocket connection status
 
   // Function to stop current TTS playback without closing the WebSocket
   const stopCurrentTTS = useCallback(() => {
@@ -135,23 +136,25 @@ const useAudioPlayer = (userInteracted) => {
         wsRef.current = ws; // Store WebSocket reference
 
         ws.onopen = () => {
-          console.log('WebSocket connection established.');
+          console.log('Audio WebSocket connection established.');
+          setIsConnected(true);
         };
 
         ws.onmessage = handleMessage;
 
         ws.onerror = (error) => {
-          console.error('WebSocket error:', error);
+          console.error('Audio WebSocket error:', error);
         };
 
         ws.onclose = (event) => {
-          console.log('WebSocket closed:', event);
+          console.log('Audio WebSocket closed:', event);
           isPlayingRef.current = false;
           setIsTTSPlaying(false);
+          setIsConnected(false);
           wsRef.current = null;
         };
       } catch (e) {
-        console.error('WebSocket initialization error:', e);
+        console.error('Audio WebSocket initialization error:', e);
       }
     };
 
@@ -165,7 +168,7 @@ const useAudioPlayer = (userInteracted) => {
     };
   }, [userInteracted, stopCurrentTTS]);
 
-  return { stopCurrentTTS, isTTSPlaying };
+  return { stopCurrentTTS, isTTSPlaying, isConnected };
 };
 
 export default useAudioPlayer;

@@ -1,9 +1,13 @@
+// src/components/StatusBar.js
+
 import React from 'react';
 import ModeToggle from './ModeToggle';
 import { FiMenu } from 'react-icons/fi';
 
 const StatusBar = ({
   status,
+  isAudioConnected,
+  isKeywordConnected,
   onLogin,
   loggedInUser,
   darkMode,
@@ -38,9 +42,14 @@ const StatusBar = ({
 
       {/* Right side with Online status and ModeToggle */}
       <div className="flex items-center space-x-4">
+        {/* Connection statuses */}
         <span className="text-lg font-bold text-contrast-orange whitespace-nowrap">
-          {status === 'connected' ? 'Online' : 'Offline'}
+          {isAudioConnected ? 'Audio: Online' : 'Audio: Offline'}
         </span>
+        <span className="text-lg font-bold text-contrast-orange whitespace-nowrap">
+          {isKeywordConnected ? 'Keyword: Online' : 'Keyword: Offline'}
+        </span>
+        {/* Dark Mode Toggle */}
         <ModeToggle darkMode={darkMode} toggleDarkMode={toggleDarkMode} />
       </div>
     </div>

@@ -1,4 +1,5 @@
 // hooks/useAppLogic.js
+
 import { useMessageLogic } from '../MessageLogic';
 import useAudioPlayer from './useAudioPlayer';
 import useWebSocket from './useWebSocket';
@@ -34,10 +35,10 @@ export const useAppLogic = () => {
   const { userInteracted, setUserInteracted } = useUserInteractionTracker();
 
   // Audio Player Logic
-  const { stopCurrentTTS, isTTSPlaying } = useAudioPlayer(userInteracted);
+  const { stopCurrentTTS, isTTSPlaying, isConnected: isAudioConnected } = useAudioPlayer(userInteracted);
 
-  // WebSocket Logic
-  const { message, isConnected } = useWebSocket('');
+  // Keyword Detection WebSocket Logic
+  const { message: keywordMessage, isConnected: isKeywordConnected } = useWebSocket("ws://localhost:8000/ws/keyword");
 
   // Pane Resizer Logic
   const { leftWidth, handleMouseDown } = useMessagePaneResizer();
@@ -65,10 +66,13 @@ export const useAppLogic = () => {
     toggleSidebar,
     stopCurrentTTS,
     isTTSPlaying,
-    isConnected,
+    isConnected: isAudioConnected && isKeywordConnected,
+    isAudioConnected,
+    isKeywordConnected,
     leftWidth,
     handleMouseDown,
     scrollToAIMessage,
     setUserInteracted,
+    keywordMessage,
   };
 };

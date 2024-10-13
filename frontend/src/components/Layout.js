@@ -1,4 +1,5 @@
 // src/components/Layout.js
+
 import React from 'react';
 import Sidebar from './Sidebar';
 import StatusBar from './StatusBar';
@@ -16,6 +17,8 @@ const Layout = ({ appLogic }) => {
     ttsEnabled,
     setTtsEnabled,
     isConnected,
+    isAudioConnected,
+    isKeywordConnected,
     onLogin,
     loggedInUser,
     setUserInteracted,
@@ -33,6 +36,8 @@ const Layout = ({ appLogic }) => {
       />
       <StatusBar
         status={isConnected ? 'connected' : 'disconnected'}
+        isAudioConnected={isAudioConnected}
+        isKeywordConnected={isKeywordConnected}
         onLogin={onLogin}
         loggedInUser={loggedInUser}
         darkMode={darkMode}
