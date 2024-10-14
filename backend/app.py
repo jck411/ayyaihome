@@ -9,6 +9,7 @@ import logging
 from init import connection_manager, SHARED_CONSTANTS, update_audio_format, loop  # Added loop import
 import json  # Added import for JSON handling
 import threading
+import os  # Added import for os
 
 # Import the keyword recognition function
 from services.azure_keyword_recognition import speech_recognize_keyword
@@ -76,7 +77,7 @@ async def audio_websocket(websocket: WebSocket):
         logger.info(f"WebSocket connection closed: {websocket.client}")
         logger.debug("WebSocketDisconnect exception caught and connection_manager notified.")
 
-# Updated WebSocket Endpoint for Keyword Detection
+# WebSocket Endpoint for Keyword Detection
 @app.websocket("/ws/keyword")
 async def keyword_websocket(websocket: WebSocket):
     logger.debug("Attempting to connect Keyword WebSocket.")
@@ -99,16 +100,30 @@ async def keyword_websocket(websocket: WebSocket):
         await connection_manager.disconnect_keyword(websocket)
         logger.info(f"Keyword WebSocket connection closed: {websocket.client}")
 
-# Function to run keyword recognition in a separate thread
-def run_keyword_recognition():
-    speech_recognize_keyword()
+# Function to run keyword recognition for a specific keyword and model
+def run_keyword_recognition(keyword, model_path):
+    speech_recognize_keyword(keyword, model_path)
 
 # Startup event to initiate keyword recognition
 @app.on_event("startup")
 async def startup_event():
-    logger.info("Starting keyword recognition in background thread.")
-    thread = threading.Thread(target=run_keyword_recognition, daemon=True)
-    thread.start()
+    logger.info("Starting keyword recognition in background threads.")
+    
+    # Define the keywords and their corresponding model file paths
+    keywords = {
+        "Hey Computer": "/home/jack/ayyaihome/backend/services/a8fb67d6-474d-49e0-b04b-0692a58a544f.table",
+        "Hey GPT": "/home/jack/ayyaihome/backend/services/HeyGPT-tune/b8b52781-97c8-4283-85cd-2cb0d28de71f.table",
+        "Hey Claude": "/home/jack/ayyaihome/backend/services/HeyClaude-tune/0e798dbb-41a6-47b9-9d9c-6a9a56f79314.table"
+    }
+
+    # Initialize and start a thread for each keyword
+    for keyword, model_path in keywords.items():
+        if not os.path.exists(model_path):
+            logger.error(f"Keyword model file not found for '{keyword}' at {model_path}")
+            continue
+        thread = threading.Thread(target=run_keyword_recognition, args=(keyword, model_path), daemon=True)
+        thread.start()
+        logger.info(f"Started keyword recognizer for '{keyword}' in thread {thread.name}.")
 
 # Entry point for running the application with Uvicorn
 if __name__ == '__main__':

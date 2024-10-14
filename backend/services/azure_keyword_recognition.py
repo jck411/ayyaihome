@@ -7,10 +7,11 @@ import time
 import azure.cognitiveservices.speech as speechsdk
 import asyncio
 import logging
-
-from init import connection_manager, loop  # Import the ConnectionManager and event loop
-from dotenv import load_dotenv
 import os
+import threading
+
+from init import connection_manager, loop  # Ensure 'init.py' is correctly set up
+from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv("/home/jack/ayyaihome/backend/.env")
@@ -22,19 +23,16 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 speech_key = os.getenv('AZURE_SPEECH_KEY')
 service_region = os.getenv('AZURE_REGION')
 
-def speech_recognize_keyword():
-    """Performs keyword-triggered speech recognition from the microphone"""
-
-    logging.info("Initializing Azure Speech Service...")
+def speech_recognize_keyword(keyword, model_path):
+    """Performs keyword-triggered speech recognition for a specific keyword."""
+    
+    logging.info(f"Initializing recognizer for keyword: '{keyword}' with model: {model_path}")
 
     # Create the speech configuration
     speech_config = speechsdk.SpeechConfig(subscription=speech_key, region=service_region)
 
     # Create the keyword recognition model
-    model = speechsdk.KeywordRecognitionModel("/home/jack/ayyaihome/backend/services/a8fb67d6-474d-49e0-b04b-0692a58a544f.table")
-
-    # Define the keyword to be recognized
-    keyword = "Hey Computer"  # Replace with your actual keyword
+    keyword_model = speechsdk.KeywordRecognitionModel(model_path)
 
     # Create a speech recognizer using the microphone
     speech_recognizer = speechsdk.SpeechRecognizer(speech_config=speech_config)
@@ -42,60 +40,57 @@ def speech_recognize_keyword():
     done = False
 
     def stop_cb(evt):
-        """Callback that signals to stop recognition upon receiving an event `evt`"""
-        logging.info(f"CLOSING on {evt}")
+        """Callback that signals to stop recognition upon receiving an event `evt`."""
         nonlocal done
+        logging.info(f"CLOSING on {evt}")
         done = True
 
-    def recognizing_cb(evt):
-        """Callback for recognizing event"""
-        if evt.result.reason == speechsdk.ResultReason.RecognizingKeyword:
-            logging.info(f"RECOGNIZING KEYWORD: {evt}")
-        elif evt.result.reason == speechsdk.ResultReason.RecognizingSpeech:
-            logging.info(f"RECOGNIZING SPEECH: {evt}")
-
     def recognized_cb(evt):
-        """Callback for recognized event"""
+        """Callback for recognized event."""
         if evt.result.reason == speechsdk.ResultReason.RecognizedKeyword:
-            logging.info(f"RECOGNIZED KEYWORD: {evt.result.text}")
+            logging.info(f"RECOGNIZED KEYWORD '{keyword}': {evt.result.text}")
             # Schedule the send_keyword_detected coroutine
-            asyncio.run_coroutine_threadsafe(send_keyword_detected(), loop)
+            asyncio.run_coroutine_threadsafe(send_keyword_detected(keyword), loop)
         elif evt.result.reason == speechsdk.ResultReason.RecognizedSpeech:
             logging.info(f"RECOGNIZED SPEECH: {evt.result.text}")
         elif evt.result.reason == speechsdk.ResultReason.NoMatch:
             logging.warning(f"NO MATCH: {evt}")
-        nonlocal done
-        done = True
+        # Do not set done to True here to allow continuous recognition
 
-    async def send_keyword_detected():
+    async def send_keyword_detected(keyword_detected):
         """Asynchronously sends a keyword detected message via ConnectionManager."""
         try:
-            await connection_manager.send_keyword("keyword_detected")
-            logging.info("Keyword message sent successfully.")
+            # Construct a dictionary with relevant information
+            message = {
+                "keyword": keyword_detected,
+                "timestamp": int(time.time())  # Optional: Add a timestamp
+            }
+            await connection_manager.send_keyword(message)
+            logging.info(f"Keyword '{keyword_detected}' message sent successfully.")
         except Exception as e:
-            logging.error(f"Failed to send keyword message: {e}")
+            logging.error(f"Failed to send keyword '{keyword_detected}' message: {e}")
 
     # Connect callbacks to events fired by the recognizer
-    speech_recognizer.recognizing.connect(recognizing_cb)
     speech_recognizer.recognized.connect(recognized_cb)
-    speech_recognizer.session_started.connect(lambda evt: logging.info(f"SESSION STARTED: {evt}"))
-    speech_recognizer.session_stopped.connect(lambda evt: logging.info(f"SESSION STOPPED: {evt}"))
-    speech_recognizer.canceled.connect(lambda evt: logging.warning(f"CANCELED: {evt}"))
+    speech_recognizer.session_started.connect(lambda evt: logging.info(f"SESSION STARTED for '{keyword}': {evt}"))
+    speech_recognizer.session_stopped.connect(lambda evt: logging.info(f"SESSION STOPPED for '{keyword}': {evt}"))
+    speech_recognizer.canceled.connect(lambda evt: logging.warning(f"CANCELED for '{keyword}': {evt}"))
 
     # Stop recognition on session stopped or canceled events
     speech_recognizer.session_stopped.connect(stop_cb)
     speech_recognizer.canceled.connect(stop_cb)
 
     # Start keyword recognition
-    logging.info(f'Say something starting with "{keyword}" followed by whatever you want...')
-    speech_recognizer.start_keyword_recognition(model)
+    logging.info(f"Starting keyword recognition for '{keyword}'...")
+    try:
+        speech_recognizer.start_keyword_recognition(keyword_model)
+    except Exception as e:
+        logging.error(f"Failed to start keyword recognition for '{keyword}': {e}")
+        return
 
     while not done:
         time.sleep(0.5)
 
     # Stop keyword recognition
     speech_recognizer.stop_keyword_recognition()
-    logging.info("Keyword recognition stopped.")
-
-if __name__ == "__main__":
-    speech_recognize_keyword()
+    logging.info(f"Keyword recognition stopped for '{keyword}'.")

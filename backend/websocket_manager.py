@@ -1,5 +1,6 @@
 # /home/jack/ayyaihome/backend/websocket_manager.py
 
+import json  # Add this import for JSON handling
 from typing import Optional
 from fastapi import WebSocket
 import logging
@@ -71,13 +72,15 @@ class ConnectionManager:
                 # Log a warning if there is no active connection to send data to
                 logger.warning("No active audio WebSocket connection to send audio.")
 
-    async def send_keyword(self, message: str):
+    async def send_keyword(self, message: dict):
         # Send keyword message to the active keyword WebSocket connection, if one exists
         async with self.keyword_lock:
             if self.active_keyword_connection:
                 try:
-                    logger.info(f"Attempting to send keyword message: {message}")
-                    await self.active_keyword_connection.send_text(message)
+                    # Convert the message dictionary to a JSON string
+                    json_message = json.dumps(message)
+                    logger.info(f"Attempting to send keyword message: {json_message}")
+                    await self.active_keyword_connection.send_text(json_message)
                     logger.info("Keyword message sent to client.")
                 except Exception as e:
                     # If an error occurs, log it and remove the active connection
