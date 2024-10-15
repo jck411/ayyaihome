@@ -1,4 +1,4 @@
-// src/components/MessageList.js
+// /home/jack/ayyaihome/frontend/src/components/MessageList.js
 
 import React, { useEffect, useRef } from 'react';
 import CodeBlock from './CodeBlock';
@@ -31,7 +31,7 @@ const renderMessageContent = (content) => {
   return parts;
 };
 
-const MessageList = ({ messages, sender, onMessageClick }) => {
+const MessageList = ({ messages, sender, selectedAPI, onMessageClick }) => {
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
@@ -47,8 +47,8 @@ const MessageList = ({ messages, sender, onMessageClick }) => {
       {messages
         .filter((message) => message.sender === sender || (sender === 'user' && message.metadata?.user))
         .map((message) => (
-          <div 
-            key={message.id} 
+          <div
+            key={message.id}
             id={`${message.sender === 'assistant' ? `ai-message-${message.id}` : ''}`}
             className={`mb-2 ${message.sender === 'assistant' ? 'ai-response' : 'user-response'}`}
             onClick={message.sender === 'user' && onMessageClick ? () => onMessageClick(message.id + 1) : null}
@@ -57,8 +57,12 @@ const MessageList = ({ messages, sender, onMessageClick }) => {
             <span className="font-bold">
               {message.sender === 'assistant'
                 ? message.metadata?.assistantType === 'openai'
-                  ? 'OpenAI: '
-                  : 'Anthropic: '
+                  ? 'GPT: ' // Label for OpenAI - GPT
+                  : message.metadata?.assistantType === 'anthropic'
+                  ? 'Claude: ' // Label for Anthropic - Claude
+                  : message.metadata?.assistantType === 'o1'
+                  ? 'o1: ' // Label for O1 Model
+                  : 'Assistant: ' // Default label if assistantType is undefined
                 : `${message.metadata?.user || 'User'}: `}
             </span>
             <div className="message-text">

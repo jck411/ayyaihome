@@ -1,4 +1,4 @@
-// useAppLogic.js
+// /home/jack/ayyaihome/frontend/src/hooks/useAppLogic.js
 
 import { useMessageLogic } from '../MessageLogic';
 import useAudioPlayer from './useAudioPlayer';
@@ -75,8 +75,18 @@ export const useAppLogic = () => {
     } else if (keyword === 'Hey Claude') {
       setSelectedAPI('anthropic');
       console.log('Selected API set to Anthropic');
+    } else if (keyword === 'Hey O1') {
+      setSelectedAPI('o1');
+      console.log('Selected API set to O1');
     }
+    // You can add more conditions for other APIs if needed
   }, [keyword, setSelectedAPI]);
+
+  // Define onMessageClick if not already defined
+  const onMessageClick = (messageId) => {
+    console.log(`Message ${messageId} clicked`);
+    // Implement additional logic as needed, e.g., highlight message, show options, etc.
+  };
 
   return {
     messages,
@@ -101,5 +111,6 @@ export const useAppLogic = () => {
     scrollToAIMessage,
     setUserInteracted,
     keywordMessage,
+    onMessageClick, // Expose onMessageClick
   };
 };

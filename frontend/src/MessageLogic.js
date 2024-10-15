@@ -1,6 +1,9 @@
+// /home/jack/ayyaihome/frontend/src/MessageLogic.js
+
 import { useState, useCallback } from 'react';
 import { generateAIResponse } from './services/openaiService';
 import { generateAnthropicResponse } from './services/anthropicService';
+import { generateO1Response } from './services/o1Service'; // Import the new service
 
 export const useMessageLogic = () => {
   // State to manage the list of messages
@@ -9,7 +12,7 @@ export const useMessageLogic = () => {
   const [input, setInput] = useState("");
   // State to manage the status (e.g., Online, Listening, Offline)
   const [status, setStatus] = useState("Online");
-  // State to track which API is selected (openai or anthropic)
+  // State to track which API is selected (openai, anthropic, or o1)
   const [selectedAPI, setSelectedAPI] = useState('openai');
   // State to track the logged-in user
   const [loggedInUser, setLoggedInUser] = useState('guest'); // <-- Keep the login logic here
@@ -58,6 +61,11 @@ export const useMessageLogic = () => {
           // Update messages with the assistant's response
           updateMessages(content, userMessage.id, isComplete);
         }, ttsEnabled);  // Pass TTS status to Anthropic service
+      } else if (selectedAPI === 'o1') {
+        // Use the new O1 service
+        await generateO1Response(context, (content, isComplete = false) => {
+          updateMessages(content, userMessage.id, isComplete);
+        });
       }
 
       setStatus("Online");  // Update status to indicate the assistant is ready
@@ -87,7 +95,7 @@ export const useMessageLogic = () => {
           text: content,
           sender: "assistant",
           timestamp: new Date().toLocaleTimeString(),
-          metadata: { assistantType: selectedAPI === "anthropic" ? "anthropic" : "openai" }  // Add metadata to indicate which API was used
+          metadata: { assistantType: selectedAPI }  // Use selectedAPI to indicate which API was used
         };
         updatedMessages.push(newAssistantMessage);  // Add the new assistant message
       }

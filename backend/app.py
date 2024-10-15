@@ -4,6 +4,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from endpoints.openai import openai_router
 from endpoints.anthropic import anthropic_router
+from endpoints.o1 import o1_router 
 import asyncio
 import logging
 from init import connection_manager, SHARED_CONSTANTS, update_audio_format, loop  # Added loop import
@@ -30,6 +31,7 @@ app.add_middleware(
 # Include routers for different endpoints
 app.include_router(openai_router)  # Router for OpenAI-related endpoints
 app.include_router(anthropic_router)  # Router for Anthropic-related endpoints
+app.include_router(o1_router)
 
 # Set up logging for the application
 logger = logging.getLogger(__name__)

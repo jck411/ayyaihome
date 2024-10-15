@@ -1,4 +1,4 @@
-//home/jack/ayyaihome/frontend/src/components/Sidebar.js
+// /home/jack/ayyaihome/frontend/src/components/Sidebar.js
 
 import React from 'react';
 
@@ -59,6 +59,18 @@ const Sidebar = ({ isOpen, selectedAPI, setSelectedAPI, darkMode, ttsEnabled, se
                 style={{ accentColor: 'var(--contrast-orange)' }}
               />
               Anthropic
+            </label>
+            {/* Add O1 Model Option */}
+            <label className="block cursor-pointer">
+              <input
+                type="radio"
+                name="api-service"
+                checked={selectedAPI === 'o1'}
+                onChange={() => setSelectedAPI('o1')}
+                className="form-radio h-4 w-4 text-contrast-orange mr-2"
+                style={{ accentColor: 'var(--contrast-orange)' }}
+              />
+              o1 Model
             </label>
           </div>
         </div>

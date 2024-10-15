@@ -1,4 +1,4 @@
-// src/components/Layout.js
+// /home/jack/ayyaihome/frontend/src/components/Layout.js
 
 import React from 'react';
 import Sidebar from './Sidebar';
