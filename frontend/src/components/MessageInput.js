@@ -1,9 +1,14 @@
 // src/components/MessageInput.js
+
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { Send, Mic, MicOff } from 'lucide-react';
+import { useSelector, useDispatch } from 'react-redux'; // Import useSelector and useDispatch
 import useSpeechToText from '../hooks/useSpeechToText';
+import { resetKeyword } from '../slices/keywordSlice'; // Import resetKeyword action
 
 const MessageInput = ({ input, setInput, sendMessage, darkMode, stopCurrentTTS }) => {
+  const dispatch = useDispatch();
+  const currentKeyword = useSelector((state) => state.keyword.currentKeyword); // Select currentKeyword from Redux store
   const [sendOnInput, setSendOnInput] = useState(false); // Flag to trigger sending a message when speech is recognized
   const textareaRef = useRef(null); // Reference for the textarea element
   const audioRef = useRef(null); // Reference for the audio element
@@ -65,6 +70,16 @@ const MessageInput = ({ input, setInput, sendMessage, darkMode, stopCurrentTTS }
       startListening(); // Start listening for speech-to-text
     }
   }, [isListening, startListening, stopListening]);
+
+  // Effect to respond to keyword detections
+  useEffect(() => {
+    if (currentKeyword) {
+      console.log(`Keyword detected: ${currentKeyword}`);
+      startListening(); // Start listening when a keyword is detected
+      // Optionally, provide user feedback or handle specific keywords differently
+      dispatch(resetKeyword()); // Reset keyword after handling
+    }
+  }, [currentKeyword, startListening, dispatch]);
 
   return (
     <div className="bg-inherit p-4">

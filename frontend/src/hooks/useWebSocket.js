@@ -1,16 +1,19 @@
-// /home/jack/ayyaihome/frontend/src/hooks/useWebSocket.js
+// src/hooks/useWebSocket.js
 
 import { useEffect, useState, useRef, useCallback } from "react";
+import { useDispatch } from 'react-redux';
+import { setKeyword } from '../slices/keywordSlice';
 
 const useWebSocket = (url) => {
   const [message, setMessage] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
   const websocketRef = useRef(null);
+  const dispatch = useDispatch(); // Get dispatch function
 
   // Function to connect to the WebSocket
   const connectWebSocket = useCallback(() => {
     if (!url) return;
-    
+
     // Create a new WebSocket connection
     websocketRef.current = new WebSocket(url);
 
@@ -22,8 +25,17 @@ const useWebSocket = (url) => {
 
     // WebSocket message event
     websocketRef.current.onmessage = (event) => {
-      setMessage(event.data);
-      console.log("Message received from WebSocket:", event.data);
+      try {
+        const data = JSON.parse(event.data);
+        setMessage(data);
+        console.log("Message received from WebSocket:", data);
+        if (data.keyword) {
+          // Dispatch setKeyword action with the received keyword and timestamp
+          dispatch(setKeyword({ keyword: data.keyword, timestamp: data.timestamp }));
+        }
+      } catch (error) {
+        console.error("Failed to parse WebSocket message:", error);
+      }
     };
 
     // WebSocket close event
@@ -36,7 +48,7 @@ const useWebSocket = (url) => {
     websocketRef.current.onerror = (error) => {
       console.error("WebSocket error:", error);
     };
-  }, [url]);
+  }, [url, dispatch]);
 
   // Effect to manage the WebSocket connection lifecycle
   useEffect(() => {
