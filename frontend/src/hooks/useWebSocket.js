@@ -1,12 +1,9 @@
-// src/hooks/useWebSocket.js
-
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useDispatch } from 'react-redux';
-import { setKeyword } from '../slices/keywordSlice';
+import { setKeyword, setKeywordConnectionStatus } from '../slices/keywordSlice';
 
 const useWebSocket = (url) => {
   const [message, setMessage] = useState(null);
-  const [isConnected, setIsConnected] = useState(false);
   const websocketRef = useRef(null);
   const dispatch = useDispatch(); // Get dispatch function
 
@@ -19,8 +16,8 @@ const useWebSocket = (url) => {
 
     // WebSocket open event
     websocketRef.current.onopen = () => {
-      setIsConnected(true);
       console.log("WebSocket connection established.");
+      dispatch(setKeywordConnectionStatus(true));  // Dispatch connection status to Redux
     };
 
     // WebSocket message event
@@ -40,8 +37,8 @@ const useWebSocket = (url) => {
 
     // WebSocket close event
     websocketRef.current.onclose = () => {
-      setIsConnected(false);
       console.log("WebSocket connection closed.");
+      dispatch(setKeywordConnectionStatus(false));  // Dispatch disconnection status to Redux
     };
 
     // WebSocket error event
@@ -62,17 +59,7 @@ const useWebSocket = (url) => {
     };
   }, [connectWebSocket]);
 
-  // Function to send a message through the WebSocket
-  const sendMessage = useCallback((msg) => {
-    if (websocketRef.current && isConnected) {
-      websocketRef.current.send(msg);
-      console.log("Message sent to WebSocket:", msg);
-    } else {
-      console.warn("Cannot send message, WebSocket is not connected.");
-    }
-  }, [isConnected]);
-
-  return { message, isConnected, sendMessage };
+  return { message };  // Return only the message, no need for sendMessage if not used
 };
 
 export default useWebSocket;

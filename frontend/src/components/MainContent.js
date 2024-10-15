@@ -1,11 +1,8 @@
-// src/components/MainContent.js
-
 import React from 'react';
 import ChatPane from './ChatPane';
-import KeywordListener from './KeywordListener';
 
 const MainContent = ({ appLogic }) => {
-  const { messages, leftWidth, handleMouseDown, scrollToAIMessage, keywordMessage } = appLogic;
+  const { messages, leftWidth, handleMouseDown, scrollToAIMessage } = appLogic;
 
   return (
     <div className="flex flex-col h-screen pt-16 pb-16">
@@ -17,7 +14,6 @@ const MainContent = ({ appLogic }) => {
           scrollToAIMessage={scrollToAIMessage}
         />
       </div>
-      <KeywordListener keywordMessage={keywordMessage} />
     </div>
   );
 };

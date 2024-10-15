@@ -1,4 +1,3 @@
-// src/slices/keywordSlice.js
 import { createSlice } from '@reduxjs/toolkit';
 
 const keywordSlice = createSlice({
@@ -6,6 +5,7 @@ const keywordSlice = createSlice({
   initialState: {
     currentKeyword: null,
     timestamp: null,
+    isConnected: false, // Add isConnected to the initial state
   },
   reducers: {
     setKeyword: (state, action) => {
@@ -16,8 +16,11 @@ const keywordSlice = createSlice({
       state.currentKeyword = null;
       state.timestamp = null;
     },
+    setKeywordConnectionStatus: (state, action) => {
+      state.isConnected = action.payload; // Update the connection status
+    },
   },
 });
 
-export const { setKeyword, resetKeyword } = keywordSlice.actions;
+export const { setKeyword, resetKeyword, setKeywordConnectionStatus } = keywordSlice.actions;
 export default keywordSlice.reducer;
