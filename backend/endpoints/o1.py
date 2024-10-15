@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import PlainTextResponse
 import logging
 import os
 from openai import OpenAI  # Import OpenAI client
@@ -15,17 +15,18 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 async def o1_stream(request: Request):
     """
     Handles POST requests to the "/api/o1" endpoint using the o1-preview model.
+    Expects plain text input and returns plain text output.
     """
     try:
         logger.info("Received request at /api/o1")
         
-        # Parse incoming JSON data from the request
-        data = await request.json()
-        logger.info(f"Request data: {data}")
+        # Read the raw text data from the request body
+        input_text = await request.body()
+        input_text = input_text.decode('utf-8')
+        logger.info(f"Input text: {input_text}")
 
-        # Extract messages from the request
-        messages = data.get('messages', [])
-        logger.info(f"Messages: {messages}")
+        # Create a message structure for OpenAI API
+        messages = [{"role": "user", "content": input_text}]
 
         # Send the request to the OpenAI API to generate a completion
         response = client.chat.completions.create(
@@ -37,10 +38,9 @@ async def o1_stream(request: Request):
         # Correct way to access content
         content = response.choices[0].message.content
         
-        # Ensure code blocks are presented properly
-        # This will return the message content with code blocks intact.
-        return JSONResponse(content={"response": content})
+        # Return the response as plain text
+        return PlainTextResponse(content=content)
 
-    except Exception as e:
-        logger.error(f"Error in o1_stream: {e}")
-        return {"error": f"Unexpected error: {str(e)}"}
+    except Exception as error:
+        logger.error(f"Error in o1_stream: {error}")
+        return PlainTextResponse(content=f"Unexpected error: {str(error)}", status_code=500)
