@@ -1,6 +1,8 @@
 // src/hooks/useAudioPlayer.js
 
 import { useEffect, useRef, useCallback, useState } from 'react';
+import { useDispatch } from 'react-redux';
+import { setIsTTSPlaying as setIsTTSPlayingAction, updateLastActivityTime } from '../slices/micSlice';
 
 const SUPPORTED_FORMATS = [
   'audio/mpeg',                    // MP3
@@ -10,6 +12,7 @@ const SUPPORTED_FORMATS = [
 ];
 
 const useAudioPlayer = (userInteracted) => {
+  const dispatch = useDispatch();
   const currentAudioRef = useRef(null);
   const isFirstMessage = useRef(true);
   const audioFormat = useRef('audio/mpeg'); // Default format
@@ -33,12 +36,13 @@ const useAudioPlayer = (userInteracted) => {
     audioQueue.current = []; // Clear any pending audio chunks
     isPlayingRef.current = false;
     setIsTTSPlaying(false);
+    dispatch(setIsTTSPlayingAction(false)); // Update Redux state
 
     // Reset the intentional stop flag after a short delay to ensure the error event is captured
     setTimeout(() => {
       isIntentionalStopRef.current = false;
     }, 100);
-  }, []);
+  }, [dispatch]);
 
   useEffect(() => {
     if (!userInteracted) {
@@ -51,6 +55,7 @@ const useAudioPlayer = (userInteracted) => {
       if (audioQueue.current.length === 0 || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
         isPlayingRef.current = false;
         setIsTTSPlaying(false);
+        dispatch(setIsTTSPlayingAction(false)); // Update Redux state
         return;
       }
 
@@ -61,10 +66,14 @@ const useAudioPlayer = (userInteracted) => {
 
       currentAudioRef.current = audio;
       setIsTTSPlaying(true);
+      dispatch(setIsTTSPlayingAction(true)); // Update Redux state
+      dispatch(updateLastActivityTime()); // Update activity time
 
       // Handle the end of the audio playback
       audio.onended = () => {
         URL.revokeObjectURL(url);
+        setIsTTSPlaying(false);
+        dispatch(setIsTTSPlayingAction(false)); // Update Redux state
         playNext();
       };
 
@@ -77,6 +86,8 @@ const useAudioPlayer = (userInteracted) => {
           console.error('Audio playback error:', e);
         }
         URL.revokeObjectURL(url);
+        setIsTTSPlaying(false);
+        dispatch(setIsTTSPlayingAction(false)); // Update Redux state
         playNext();
       };
 
@@ -117,6 +128,7 @@ const useAudioPlayer = (userInteracted) => {
           // End of audio stream indicator received
           console.log('Received end of audio stream.');
           setIsTTSPlaying(false);
+          dispatch(setIsTTSPlayingAction(false)); // Update Redux state
           isPlayingRef.current = false;
           return;
         }
@@ -150,6 +162,7 @@ const useAudioPlayer = (userInteracted) => {
           console.log('Audio WebSocket closed:', event);
           isPlayingRef.current = false;
           setIsTTSPlaying(false);
+          dispatch(setIsTTSPlayingAction(false)); // Update Redux state
           setIsConnected(false);
           wsRef.current = null;
         };
@@ -166,7 +179,7 @@ const useAudioPlayer = (userInteracted) => {
         ws.close();
       }
     };
-  }, [userInteracted, stopCurrentTTS]);
+  }, [userInteracted, stopCurrentTTS, dispatch]);
 
   return { stopCurrentTTS, isTTSPlaying, isConnected };
 };
