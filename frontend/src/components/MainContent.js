@@ -18,7 +18,7 @@ const MainContent = ({ appLogic }) => {
 
   return (
     <div className="flex flex-col h-screen pt-16 pb-16">
-      <div className="mx-auto main-content" style={{ maxWidth: '950px', width: '100%' }}>
+      <div className="mx-auto main-content" style={{ maxWidth: '1200px', width: '100%' }}>
         <ChatPane
           messages={messages}
           leftWidth={leftWidth}
