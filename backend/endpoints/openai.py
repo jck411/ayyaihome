@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 import asyncio
-import queue
 import logging
 from init import OPENAI_CONSTANTS, aclient
 from services.tts_service import process_streams
@@ -20,31 +19,34 @@ async def openai_stream(request: Request):
     """
     try:
         logger.info("Received request at /api/openai")
+        
         # Stop any active TTS tasks before handling the new request
-        await tts_manager.stop_active_tts()
+        await tts_manager.stop_active_tts()  # Ensure this doesn't block starting new task
 
         # Parse incoming JSON data from the request
         data = await request.json()
         logger.info(f"Request data: {data}")
 
-        # Extract messages from the request and prepend the system prompt
+        # Extract messages from the request and prepend the system prompt from OPENAI_CONSTANTS
         messages = [{"role": msg["role"], "content": msg["content"]} for msg in data.get('messages', [])]
         messages.insert(0, OPENAI_CONSTANTS["SYSTEM_PROMPT"])
         logger.info(f"Messages after adding system prompt: {messages}")
 
-        # Determine if TTS (Text-To-Speech) is enabled
-        tts_enabled = data.get('ttsEnabled', True)
+        # Determine if TTS (Text-To-Speech) is enabled (default from OPENAI_CONSTANTS)
+        tts_enabled = data.get('ttsEnabled', OPENAI_CONSTANTS["FRONTEND_PLAYBACK"])
         logger.info(f"TTS Enabled: {tts_enabled}")
 
-        # Initialize phrase queue only if TTS is enabled
+        # Initialize phrase queue and audio queue only if TTS is enabled
         phrase_queue = None
+        audio_queue = None
         if tts_enabled:
-            # Create asynchronous and synchronous queues for processing TTS
+            # Create asynchronous queues for processing TTS
             phrase_queue = asyncio.Queue()
-            audio_queue = queue.Queue()  # Synchronous queue for audio processing
+            audio_queue = asyncio.Queue()
             logger.info("Initialized phrase and audio queues")
 
             # Start the TTS processing task with required arguments
+            # Start the new task immediately after stopping the old task
             tts_task = asyncio.create_task(process_streams(phrase_queue, audio_queue, OPENAI_CONSTANTS))
             tts_manager.register_task(tts_task)
             logger.info("Started TTS processing task")
@@ -62,9 +64,13 @@ async def openai_stream(request: Request):
         return {"error": f"Unexpected error: {str(e)}"}
 
 
-async def stream_completion(messages: list, phrase_queue: asyncio.Queue, model: str = OPENAI_CONSTANTS["DEFAULT_RESPONSE_MODEL"]):
+async def stream_completion(messages: list, phrase_queue: asyncio.Queue, model: str = OPENAI_CONSTANTS["MODEL"]):
     """
-    Streams the response from the OpenAI API.
+    Streams the response from the OpenAI API and processes phrases for TTS.
+
+    :param messages: List of conversation messages
+    :param phrase_queue: Queue to send phrases for TTS processing
+    :param model: OpenAI model to use for completion
     """
     try:
         logger.info("Starting stream_completion from OpenAI API")
@@ -72,14 +78,20 @@ async def stream_completion(messages: list, phrase_queue: asyncio.Queue, model: 
         response = await aclient.chat.completions.create(
             model=model,
             messages=messages,
-            stream=True,
+            stream=OPENAI_CONSTANTS["STREAM"],
             temperature=OPENAI_CONSTANTS["TEMPERATURE"],
-            top_p=OPENAI_CONSTANTS["TOP_P"]
+            top_p=OPENAI_CONSTANTS["TOP_P"],
+            max_tokens=OPENAI_CONSTANTS["MAX_TOKENS"],
+            frequency_penalty=OPENAI_CONSTANTS["FREQUENCY_PENALTY"],
+            presence_penalty=OPENAI_CONSTANTS["PRESENCE_PENALTY"],
+            stop=OPENAI_CONSTANTS["STOP"],
+            logit_bias=OPENAI_CONSTANTS["LOGIT_BIAS"]
         )
         logger.info("Received response from OpenAI API")
 
-        working_string = ""  # To store text content temporarily
-        in_code_block = False  # Flag to track whether we are inside a code block
+        working_string = ""
+        in_code_block = False
+        last_phrase = ""
 
         async for chunk in response:
             # Extract content from the response chunk, if available
@@ -90,72 +102,16 @@ async def stream_completion(messages: list, phrase_queue: asyncio.Queue, model: 
                 yield content  # Stream content back to the client
                 working_string += content
 
-                # Process phrases to identify and handle code blocks and phrases
-                while True:
-                    if in_code_block:
-                        # Find the end of the code block
-                        code_block_end = working_string.find("```", 3)
-                        if code_block_end != -1:
-                            # Remove the code block from the working string
-                            working_string = working_string[code_block_end + 3:]
-                            if phrase_queue:
-                                await phrase_queue.put("Code presented on screen")
-                                logger.info("Code block ended, queued code presented message")
-                            in_code_block = False
-                        else:
-                            break
-                    else:
-                        # Find the start of the next code block
-                        code_block_start = working_string.find("```")
-                        if code_block_start != -1:
-                            # Extract the phrase before the code block
-                            phrase, working_string = working_string[:code_block_start], working_string[code_block_start:]
-                            if phrase.strip() and phrase_queue:
-                                await phrase_queue.put(phrase.strip())
-                                logger.info(f"Queued phrase: {phrase.strip()}")
-                            in_code_block = True
-                        else:
-                            # Find the next phrase ending point
-                            next_phrase_end = find_next_phrase_end(working_string)
-                            if next_phrase_end == -1:
-                                break
-                            # Extract the phrase and update the working string
-                            phrase, working_string = working_string[:next_phrase_end + 1].strip(), working_string[next_phrase_end + 1:]
-                            if phrase_queue and phrase:
-                                await phrase_queue.put(phrase)
-                                logger.info(f"Queued phrase: {phrase}")
+                # Process the working string to handle code blocks and phrases
+                working_string, in_code_block, last_phrase = await process_working_string(
+                    working_string, in_code_block, phrase_queue, last_phrase
+                )
 
         # Process any remaining text after streaming ends
-        while True:
-            if in_code_block:
-                # Find the end of the code block
-                code_block_end = working_string.find("```", 3)
-                if code_block_end != -1:
-                    # Remove the code block from the working string
-                    working_string = working_string[code_block_end + 3:]
-                    if phrase_queue:
-                        await phrase_queue.put("Code presented on screen")
-                        logger.info("Code block ended, queued code presented message")
-                    in_code_block = False
-                else:
-                    break
-            else:
-                # Find the start of the next code block
-                code_block_start = working_string.find("```")
-                if code_block_start != -1:
-                    # Extract the phrase before the code block
-                    phrase, working_string = working_string[:code_block_start], working_string[code_block_start:]
-                    if phrase.strip() and phrase_queue:
-                        await phrase_queue.put(phrase.strip())
-                        logger.info(f"Queued phrase: {phrase.strip()}")
-                    in_code_block = True
-                else:
-                    # Queue any remaining text
-                    if working_string.strip() and phrase_queue:
-                        await phrase_queue.put(working_string.strip())
-                        logger.info(f"Queued remaining working string: {working_string.strip()}")
-                        working_string = ''
-                    break
+        if working_string.strip():
+            working_string, in_code_block, last_phrase = await process_working_string(
+                working_string, in_code_block, phrase_queue, last_phrase, final=True
+            )
 
         # End of TTS - indicate that no more phrases will be sent
         if phrase_queue:
@@ -168,3 +124,66 @@ async def stream_completion(messages: list, phrase_queue: asyncio.Queue, model: 
             await phrase_queue.put(None)
         yield f"Error: {e}"
         logger.error(f"Yielding error: {e}")
+
+
+async def process_working_string(
+    working_string: str,
+    in_code_block: bool,
+    phrase_queue: asyncio.Queue,
+    last_phrase: str,
+    final: bool = False
+):
+    """
+    Processes the working string to extract phrases and handle code blocks.
+
+    :param working_string: The accumulated text
+    :param in_code_block: Flag indicating if currently in a code block
+    :param phrase_queue: Queue to send phrases for TTS processing
+    :param last_phrase: The last phrase that was queued
+    :param final: Flag indicating if this is the final call (after streaming ends)
+    :return: Tuple of updated (working_string, in_code_block, last_phrase)
+    """
+    while True:
+        if in_code_block:
+            code_block_end = working_string.find("```", 3)
+            if code_block_end != -1:
+                # Exiting code block
+                working_string = working_string[code_block_end + 3:]
+                if phrase_queue:
+                    await phrase_queue.put("Code presented on screen.")
+                    logger.info("Code block ended, queued code presentation message.")
+                in_code_block = False
+            else:
+                # Still inside code block
+                break
+        else:
+            code_block_start = working_string.find("```")
+            if code_block_start != -1:
+                # Entering code block
+                phrase, working_string = working_string[:code_block_start], working_string[code_block_start:]
+                phrase = phrase.strip()
+                if phrase and phrase_queue and phrase != last_phrase:
+                    await phrase_queue.put(phrase)
+                    logger.info(f"Queued phrase: {phrase}")
+                    last_phrase = phrase
+                in_code_block = True
+            else:
+                # Look for sentence endings
+                next_phrase_end = find_next_phrase_end(working_string)
+                if next_phrase_end == -1:
+                    if final and working_string.strip() and phrase_queue and working_string.strip() != last_phrase:
+                        phrase = working_string.strip()
+                        await phrase_queue.put(phrase)
+                        logger.info(f"Queued final phrase: {phrase}")
+                        last_phrase = phrase
+                        working_string = ""
+                    break
+                else:
+                    # Extract phrase up to the next sentence end
+                    phrase, working_string = working_string[:next_phrase_end + 1], working_string[next_phrase_end + 1:]
+                    phrase = phrase.strip()
+                    if phrase and phrase_queue and phrase != last_phrase:
+                        await phrase_queue.put(phrase)
+                        logger.info(f"Queued phrase: {phrase}")
+                        last_phrase = phrase
+    return working_string, in_code_block, last_phrase

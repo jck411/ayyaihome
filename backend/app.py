@@ -1,5 +1,3 @@
-# /home/jack/ayyaihome/backend/app.py
-
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from endpoints.openai import openai_router
@@ -44,7 +42,7 @@ async def audio_websocket(websocket: WebSocket):
     
     try:
         # Call to update the audio format before establishing connection
-        update_audio_format("ogg-opus")  # Change to "mp3", "aac", or "ogg-opus" as needed
+        update_audio_format(SHARED_CONSTANTS["AUDIO_FORMAT_KEY"])  # This will dynamically update based on the format key
         
         # Attempt to connect the WebSocket
         await connection_manager.connect_audio(websocket)
@@ -53,7 +51,7 @@ async def audio_websocket(websocket: WebSocket):
         # Send Audio Format Information as Binary Message
         format_info = {
             "type": "format",
-            "format": SHARED_CONSTANTS.get("MIME_TYPE", "audio/mpeg")  # Default to 'audio/mpeg' if MIME_TYPE not set
+            "format": SHARED_CONSTANTS["MIME_TYPE"]  # MIME type dynamically pulled from SHARED_CONSTANTS
         }
         format_message = json.dumps(format_info).encode('utf-8')  # Encode JSON to bytes
         
