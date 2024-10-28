@@ -57,10 +57,10 @@ SHARED_CONSTANTS = {
     "MINIMUM_PHRASE_LENGTH": 25,  # Minimum length of a phrase for processing
     "TTS_CHUNK_SIZE": 256,        # Chunk size for Text-to-Speech audio streaming
     "DEFAULT_TTS_MODEL": "tts-1",   # Default Text-to-Speech model
-    "AUDIO_FORMAT_KEY": "aac",       # Default audio format key
+    "AUDIO_FORMAT_KEY": "pcm",       # Default audio format key
     "TTS_SPEED": 1.0,               # Speed of the Text-to-Speech playback
     "DELIMITERS": [".", "?", "!"],   # Sentence delimiters for splitting text
-    "FRONTEND_PLAYBACK": True        # Enable frontend playback via WebSocket
+    "FRONTEND_PLAYBACK": True       # Enable frontend playback via WebSocket
 }
 
 # OpenAI-specific constants

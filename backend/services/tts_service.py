@@ -69,7 +69,7 @@ async def text_to_speech_processor(phrase_queue: asyncio.Queue, audio_queue: asy
                     voice=tts_constants["DEFAULT_VOICE"],
                     input=phrase,
                     speed=tts_constants["TTS_SPEED"],
-                    response_format=tts_constants.get("RESPONSE_FORMAT", 'aac')
+                    response_format=tts_constants.get("RESPONSE_FORMAT")
                 ) as response:
                     audio_data = b""
                     # Iterate over the response chunks and accumulate audio data
