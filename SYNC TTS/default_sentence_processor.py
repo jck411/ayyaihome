@@ -1,5 +1,3 @@
-# default_sentence_processor.py
-
 from sentence_processor_interface import SentenceProcessor
 import re
 import queue
@@ -10,6 +8,7 @@ class DefaultSentenceProcessor(SentenceProcessor):
         self.sentence_queue = sentence_queue
         self.text_generation_complete = text_generation_complete
         self.sentence_processing_complete = sentence_processing_complete
+        self.sentence_re = re.compile(r'(?<=[.!?])\s+')
 
     def process_sentences(self):
         sentence_buffer = ""
@@ -19,10 +18,10 @@ class DefaultSentenceProcessor(SentenceProcessor):
                 sentence_buffer += new_text
 
                 # Split sentences properly
-                sentences = re.split(r'(?<=[.!?])\s+', sentence_buffer)
+                sentences = self.sentence_re.split(sentence_buffer)
                 if sentences:
                     # If the last character is not a sentence terminator, keep the last part in buffer
-                    if sentence_buffer[-1] not in '.!?':
+                    if sentence_buffer and sentence_buffer[-1] not in '.!?':
                         sentence_buffer = sentences.pop()
                     else:
                         sentence_buffer = ''

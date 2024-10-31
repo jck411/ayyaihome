@@ -249,3 +249,30 @@ p.terminate()
 By structuring your code into these modules and classes, each component becomes interchangeable. You can now replace any module with a different implementation by creating a new class that inherits from the respective abstract base class (TextGenerator, SentenceProcessor, TTSService, AudioPlayer) and implements its abstract methods.
 
 This modular design adheres to the factory pattern and allows you to plug in different services or methods without changing the core logic of your application.
+
+
+
+
+
+openai TTS API call must use the following format: 
+
+                sentence = self.sentence_queue.get(timeout=0.5)
+                with self.client.Audio.speech_with_streaming_response.create(
+                    model="tts-1",
+                    voice="alloy",
+                    input=sentence,
+                    response_format="pcm"
+for openai chat API:
+
+        chat_completion = self.client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": user_prompt}
+            ],
+            stream=True
+
+
+and openai key must be passed thorugh client:
+text_client = OpenAI(api_key=openai_api_key)
+

@@ -1,5 +1,3 @@
-# audio_player.py
-
 import queue
 
 def play_audio(audio_queue, audio_generation_complete, stream):

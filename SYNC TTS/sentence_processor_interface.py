@@ -1,5 +1,3 @@
-# sentence_processor_interface.py
-
 from abc import ABC, abstractmethod
 
 class SentenceProcessor(ABC):

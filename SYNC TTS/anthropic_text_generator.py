@@ -1,6 +1,6 @@
-# anthropic_text_generator.py
-
 from text_generator_interface import TextGenerator
+import threading
+import anthropic
 
 class AnthropicTextGenerator(TextGenerator):
     def __init__(self, client, text_queue, text_generation_complete):
@@ -9,9 +9,6 @@ class AnthropicTextGenerator(TextGenerator):
         self.text_generation_complete = text_generation_complete
 
     def generate_text(self):
-        import threading
-        import anthropic
-
         # Get the prompt from the terminal
         user_prompt = input("Please enter your prompt: ")
 

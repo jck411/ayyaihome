@@ -1,5 +1,3 @@
-# azure_tts_service.py
-
 from tts_service_interface import TTSService
 import queue
 import azure.cognitiveservices.speech as speechsdk
@@ -17,16 +15,16 @@ class AzureTTSService(TTSService):
             speechsdk.SpeechSynthesisOutputFormat.Raw24Khz16BitMonoPcm
         )
 
+        # Create a Speech Synthesizer
+        self.synthesizer = speechsdk.SpeechSynthesizer(speech_config=self.speech_config, audio_config=None)
+
     def generate_audio(self):
         while not (self.sentence_processing_complete.is_set() and self.sentence_queue.empty()):
             try:
                 sentence = self.sentence_queue.get(timeout=0.5)
 
-                # Create a Speech Synthesizer
-                synthesizer = speechsdk.SpeechSynthesizer(speech_config=self.speech_config, audio_config=None)
-
                 # Synthesize the text to an audio data stream
-                result = synthesizer.speak_text_async(sentence).get()
+                result = self.synthesizer.speak_text_async(sentence).get()
 
                 # Check result
                 if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:

@@ -1,5 +1,3 @@
-# openai_tts_service.py
-
 from tts_service_interface import TTSService
 import queue
 

@@ -1,18 +1,16 @@
-# streaming_sentence_processor.py
-
 from sentence_processor_interface import SentenceProcessor
-import threading
 import queue
 from functools import reduce
-from typing import Callable, Generator, List
+from typing import Callable, List
+import config  # Import the configuration
 
-class StreamingSentenceProcessor(SentenceProcessor):
+class transformersSentenceProcessor(SentenceProcessor):
     def __init__(
         self,
         text_queue: queue.Queue,
         sentence_queue: queue.Queue,
-        text_generation_complete: threading.Event,
-        sentence_processing_complete: threading.Event,
+        text_generation_complete,
+        sentence_processing_complete,
         content_transformers: List[Callable[[str], str]] = None,
         phrase_transformers: List[Callable[[str], str]] = None,
         delimiters: List[str] = None,
@@ -22,11 +20,10 @@ class StreamingSentenceProcessor(SentenceProcessor):
         self.sentence_queue = sentence_queue
         self.text_generation_complete = text_generation_complete
         self.sentence_processing_complete = sentence_processing_complete
-        self.content_transformers = content_transformers or []
-        self.phrase_transformers = phrase_transformers or []
-        self.delimiters = delimiters or [f"{d} " for d in (".", "?", "!")]
-        self.minimum_phrase_length = minimum_phrase_length
-        self.stop_event = threading.Event()
+        self.content_transformers = content_transformers or config.CONTENT_TRANSFORMERS
+        self.phrase_transformers = phrase_transformers or config.PHRASE_TRANSFORMERS
+        self.delimiters = delimiters or config.DELIMITERS
+        self.minimum_phrase_length = minimum_phrase_length or config.MINIMUM_PHRASE_LENGTH
 
     def apply_transformers(self, s: str, transformers: List[Callable[[str], str]]) -> str:
         return reduce(lambda c, transformer: transformer(c), transformers, s)
@@ -56,7 +53,7 @@ class StreamingSentenceProcessor(SentenceProcessor):
                             working_string[delimiter_index + len(delimiter):],
                         )
                         # Apply phrase transformers
-                        phrase = self.apply_transformers(phrase, self.phrase_transformers)
+                        phrase = self.apply_transformers(phrase.strip(), self.phrase_transformers)
                         self.sentence_queue.put(phrase)
                 else:
                     continue

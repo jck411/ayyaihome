@@ -74,22 +74,18 @@ if config.SENTENCE_PROCESSOR == "default":
         sentence_processing_complete
     )
 
-elif config.SENTENCE_PROCESSOR == "streaming":
-    from streaming_sentence_processor import StreamingSentenceProcessor
+elif config.SENTENCE_PROCESSOR == "transformers":
+    from transformers_sentence_processor import transformersSentenceProcessor
 
-    sentence_processor = StreamingSentenceProcessor(
+    sentence_processor = transformersSentenceProcessor(
         text_queue,
         sentence_queue,
         text_generation_complete,
         sentence_processing_complete,
-        content_transformers=[
-            lambda c: c.replace("\n", " ")
-        ],
-        phrase_transformers=[
-            lambda p: p.strip()
-        ],
-        delimiters=[f"{d} " for d in (".", "?", "!")],
-        minimum_phrase_length=200
+        content_transformers=config.CONTENT_TRANSFORMERS,
+        phrase_transformers=config.PHRASE_TRANSFORMERS,
+        delimiters=config.DELIMITERS,
+        minimum_phrase_length=config.MINIMUM_PHRASE_LENGTH
     )
 
 elif config.SENTENCE_PROCESSOR == "async":
@@ -100,14 +96,10 @@ elif config.SENTENCE_PROCESSOR == "async":
         sentence_queue,
         text_generation_complete,
         sentence_processing_complete,
-        content_transformers=[
-            lambda c: c.replace("\n", " ")
-        ],
-        phrase_transformers=[
-            lambda p: p.strip()
-        ],
-        delimiters=[f"{d} " for d in (".", "?", "!")],
-        minimum_phrase_length=150
+        content_transformers=config.CONTENT_TRANSFORMERS,
+        phrase_transformers=config.PHRASE_TRANSFORMERS,
+        delimiters=config.DELIMITERS,
+        minimum_phrase_length=config.MINIMUM_PHRASE_LENGTH
     )
 
 else:
@@ -181,3 +173,10 @@ audio_play_thread.join()
 stream.stop_stream()
 stream.close()
 p.terminate()
+
+from abc import ABC, abstractmethod
+
+class SentenceProcessor(ABC):
+    @abstractmethod
+    def process_sentences(self):
+        pass
