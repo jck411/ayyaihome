@@ -1,6 +1,8 @@
 # openai_text_generator.py
 
 from text_generator_interface import TextGenerator
+import time
+import timing  # Import the timing module
 
 class OpenAITextGenerator(TextGenerator):
     def __init__(self, client, text_queue, text_generation_complete):
@@ -13,6 +15,9 @@ class OpenAITextGenerator(TextGenerator):
 
         # Get the prompt from the terminal
         user_prompt = input("Please enter your prompt: ")
+
+        # Record the time when the prompt is received
+        timing.prompt_received_time = time.time()
 
         chat_completion = self.client.chat.completions.create(
             model="gpt-4",

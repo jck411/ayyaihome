@@ -1,31 +1,26 @@
 # main.py
 
 import os
-import threading
-import queue
+import asyncio
 import pyaudio
 from dotenv import load_dotenv
 import time
 
 # Import the modules
-from text_generator_interface import TextGenerator
-from tts_service_interface import TTSService
 import config  # Import the configuration
-
-# Import the timing module
 import timing
 
 # Load environment variables
 load_dotenv()
 
 # Initialize queues and events
-text_queue = queue.Queue()
-sentence_queue = queue.Queue()
-audio_queue = queue.Queue()
+text_queue = asyncio.Queue()
+sentence_queue = asyncio.Queue()
+audio_queue = asyncio.Queue()
 
-text_generation_complete = threading.Event()
-sentence_processing_complete = threading.Event()
-audio_generation_complete = threading.Event()
+text_generation_complete = asyncio.Event()
+sentence_processing_complete = asyncio.Event()
+audio_generation_complete = asyncio.Event()
 
 # Initialize PyAudio
 p = pyaudio.PyAudio()
@@ -39,15 +34,18 @@ stream = p.open(format=pyaudio.paInt16,
 # Initialize the text generator based on configuration
 if config.TEXT_GENERATOR == "openai":
     from openai_text_generator import OpenAITextGenerator
-    from openai import OpenAI
+    import openai
 
+    # Set OpenAI API key
     openai_api_key = os.getenv("OPENAI_API_KEY")
     if not openai_api_key:
         raise ValueError("OPENAI_API_KEY environment variable is not set.")
+    openai.api_key = openai_api_key
 
-    text_client = OpenAI(api_key=openai_api_key)
+    # Initialize `aclient` as an async OpenAI client
+    aclient = openai
 
-    text_generator = OpenAITextGenerator(text_client, text_queue, text_generation_complete)
+    text_generator = OpenAITextGenerator(aclient, text_queue, text_generation_complete)
 
 elif config.TEXT_GENERATOR == "anthropic":
     from anthropic_text_generator import AnthropicTextGenerator
@@ -76,9 +74,9 @@ if config.SENTENCE_PROCESSOR == "default":
     )
 
 elif config.SENTENCE_PROCESSOR == "transformers":
-    from transformers_sentence_processor import transformersSentenceProcessor
+    from transformers_sentence_processor import TransformersSentenceProcessor
 
-    sentence_processor = transformersSentenceProcessor(
+    sentence_processor = TransformersSentenceProcessor(
         text_queue,
         sentence_queue,
         text_generation_complete,
@@ -109,16 +107,11 @@ else:
 # Initialize the TTS service based on configuration
 if config.TTS_SERVICE == "openai":
     from openai_tts_service import OpenAITTSService
-    from openai import OpenAI
+    import openai
 
-    openai_api_key = os.getenv("OPENAI_API_KEY")
-    if not openai_api_key:
-        raise ValueError("OPENAI_API_KEY environment variable is not set.")
-
-    tts_client = OpenAI(api_key=openai_api_key)
-
+    # Use `aclient` if already initialized above
     tts_service = OpenAITTSService(
-        tts_client,
+        aclient,
         sentence_queue,
         audio_queue,
         sentence_processing_complete,
@@ -147,12 +140,11 @@ elif config.TTS_SERVICE == "azure":
 else:
     raise ValueError("Invalid TTS_SERVICE in config.py")
 
-
 # Define the play_audio function with timing logic
-def play_audio(audio_queue, audio_generation_complete, stream):
+async def play_audio(audio_queue, audio_generation_complete, stream):
     while not (audio_generation_complete.is_set() and audio_queue.empty()):
         try:
-            audio_chunk = audio_queue.get(timeout=0.5)
+            audio_chunk = await asyncio.wait_for(audio_queue.get(), timeout=0.5)
 
             # Log the time when the first audio chunk is played
             if timing.first_audio_chunk_time is None:
@@ -161,40 +153,28 @@ def play_audio(audio_queue, audio_generation_complete, stream):
                 print(f"\nTime from prompt to first sound: {time_taken:.2f} seconds")
 
             stream.write(audio_chunk)
-        except queue.Empty:
+        except asyncio.TimeoutError:
+            await asyncio.sleep(0.1)
             continue
 
-# Start the threads
-text_thread = threading.Thread(target=text_generator.generate_text)
-text_thread.start()
+# Define the main function
+async def main():
+    # Start the tasks
+    tasks = [
+        asyncio.create_task(text_generator.generate_text()),
+        asyncio.create_task(sentence_processor.process_sentences()),
+        asyncio.create_task(tts_service.generate_audio()),
+        asyncio.create_task(play_audio(audio_queue, audio_generation_complete, stream))
+    ]
 
-sentence_thread = threading.Thread(target=sentence_processor.process_sentences)
-sentence_thread.start()
+    # Wait for all tasks to complete
+    await asyncio.gather(*tasks)
 
-audio_gen_thread = threading.Thread(target=tts_service.generate_audio)
-audio_gen_thread.start()
+    # Close the PyAudio stream properly
+    stream.stop_stream()
+    stream.close()
+    p.terminate()
 
-time.sleep(1)  # Delay for smooth start
-audio_play_thread = threading.Thread(
-    target=play_audio,
-    args=(audio_queue, audio_generation_complete, stream)
-)
-audio_play_thread.start()
-
-# Wait for all threads to complete
-text_thread.join()
-sentence_thread.join()
-audio_gen_thread.join()
-audio_play_thread.join()
-
-# Close the PyAudio stream properly
-stream.stop_stream()
-stream.close()
-p.terminate()
-
-from abc import ABC, abstractmethod
-
-class SentenceProcessor(ABC):
-    @abstractmethod
-    def process_sentences(self):
-        pass
+# Run the main function
+if __name__ == "__main__":
+    asyncio.run(main())

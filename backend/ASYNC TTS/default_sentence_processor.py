@@ -1,0 +1,43 @@
+# default_sentence_processor.py
+
+from sentence_processor_interface import SentenceProcessor
+import re
+import asyncio
+
+class DefaultSentenceProcessor(SentenceProcessor):
+    def __init__(self, text_queue, sentence_queue, text_generation_complete, sentence_processing_complete):
+        self.text_queue = text_queue
+        self.sentence_queue = sentence_queue
+        self.text_generation_complete = text_generation_complete
+        self.sentence_processing_complete = sentence_processing_complete
+        self.sentence_re = re.compile(r'(?<=[.!?])\s+')
+
+    async def process_sentences(self):
+        sentence_buffer = ""
+        while not (self.text_generation_complete.is_set() and self.text_queue.empty()):
+            try:
+                new_text = await asyncio.wait_for(self.text_queue.get(), timeout=0.1)
+                sentence_buffer += new_text
+
+                # Split sentences properly
+                sentences = self.sentence_re.split(sentence_buffer)
+                if sentences:
+                    # If the last character is not a sentence terminator, keep the last part in buffer
+                    if sentence_buffer and sentence_buffer[-1] not in '.!?':
+                        sentence_buffer = sentences.pop()
+                    else:
+                        sentence_buffer = ''
+                    for sentence in sentences:
+                        await self.sentence_queue.put(sentence.strip())
+                else:
+                    # No complete sentences yet, keep buffering
+                    continue
+            except asyncio.TimeoutError:
+                await asyncio.sleep(0.1)
+                continue
+
+        # Process any remaining text
+        if sentence_buffer:
+            await self.sentence_queue.put(sentence_buffer.strip())
+
+        self.sentence_processing_complete.set()

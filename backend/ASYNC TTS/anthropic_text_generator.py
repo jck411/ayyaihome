@@ -1,8 +1,8 @@
 # anthropic_text_generator.py
 
 from text_generator_interface import TextGenerator
-import threading
 import anthropic
+import asyncio
 import time
 import timing  # Import the timing module
 
@@ -12,9 +12,10 @@ class AnthropicTextGenerator(TextGenerator):
         self.text_queue = text_queue
         self.text_generation_complete = text_generation_complete
 
-    def generate_text(self):
-        # Get the prompt from the terminal
-        user_prompt = input("Please enter your prompt: ")
+    async def generate_text(self):
+        # Get the prompt from the terminal asynchronously
+        loop = asyncio.get_event_loop()
+        user_prompt = await loop.run_in_executor(None, input, "Please enter your prompt: ")
 
         # Record the time when the prompt is received
         timing.prompt_received_time = time.time()
@@ -22,14 +23,13 @@ class AnthropicTextGenerator(TextGenerator):
         # Prepare the messages
         messages = [{"role": "user", "content": user_prompt}]
 
-        # Start streaming response from Claude
-        with self.client.messages.stream(
-            max_tokens=1024,
-            messages=messages,
-            model="claude-3-5-sonnet-20241022",
-        ) as stream:
-            for text in stream.text_stream:
-                print(text, end="", flush=True)
-                self.text_queue.put(text)
+        # Start streaming response from Claude asynchronously
+        async for text in self.client.completions.stream(
+            max_tokens_to_sample=1024,
+            prompt=anthropic.HUMAN_PROMPT + user_prompt + anthropic.AI_PROMPT,
+            model="claude-1"
+        ):
+            print(text, end="", flush=True)
+            await self.text_queue.put(text)
 
         self.text_generation_complete.set()
