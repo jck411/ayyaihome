@@ -1,241 +1,351 @@
 import os
 import asyncio
-from typing import List
-from fastapi import FastAPI, Request
+import uuid
+from typing import List, Dict
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 import pyaudio
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
-import threading
-import queue
+import logging
+from concurrent.futures import ThreadPoolExecutor
 
 # Load environment variables from a .env file
 load_dotenv()
 
-# Global stop event
-stop_event = threading.Event()
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# Constants used throughout the application
-CONSTANTS = {
-    "MINIMUM_PHRASE_LENGTH": 25,  # Minimum length for a phrase before it's processed for TTS
-    "TTS_CHUNK_SIZE": 1024,  # Size of audio chunks for TTS
-    "DEFAULT_RESPONSE_MODEL": "gpt-4o-mini",  # Default OpenAI model for text generation
-    "DEFAULT_TTS_MODEL": "tts-1",  # Default model for text-to-speech
-    "DEFAULT_VOICE": "alloy",  # Default voice for TTS
-    "AUDIO_FORMAT": pyaudio.paInt16,  # Audio format for playback
-    "CHANNELS": 1,  # Number of audio channels
-    "RATE": 24000,  # Sample rate for audio playback
-    "TTS_SPEED": 1.0,  # Speed for TTS output
-    "TEMPERATURE": 1.0,  # Temperature for text generation (controls creativity)
-    "TOP_P": 1.0,  # Top-p sampling parameter for text generation
-    "DELIMITERS": [".", "?", "!"],  # Delimiters to determine phrase boundaries
-    "SYSTEM_PROMPT": {"role": "system", "content": "You are a helpful but witty and dry assistant"}  # System prompt for the OpenAI model
-}
+# Configuration constants
+class Config:
+    MINIMUM_PHRASE_LENGTH = 25
+    TTS_CHUNK_SIZE = 512
+    DEFAULT_RESPONSE_MODEL = "gpt-4o-mini"
+    DEFAULT_TTS_MODEL = "tts-1"
+    DEFAULT_VOICE = "alloy"
+    AUDIO_FORMAT = pyaudio.paInt16
+    CHANNELS = 1
+    RATE = 24000
+    TTS_SPEED = 1.0
+    TEMPERATURE = 1.0
+    TOP_P = 1.0
+    DELIMITERS = [".", "?", "!"]
+    SYSTEM_PROMPT = {"role": "system", "content": "You are a helpful but witty and dry assistant"}
 
-# Initialize the OpenAI API client
+# Initialize FastAPI app and OpenAI client
+app = FastAPI()
 aclient = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# Initialize the FastAPI app
-app = FastAPI()
-
-# Add CORS middleware to allow requests from the frontend
+# CORS settings for frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Frontend origin
+    allow_origins=["http://localhost:3000"],  # Update this as needed
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Initialize PyAudio for audio playback
+# Initialize PyAudio
 p = pyaudio.PyAudio()
+
+# Create a ThreadPoolExecutor for blocking I/O operations
+executor = ThreadPoolExecutor(max_workers=2)
+
+# Global registry to track active streams
+active_streams: Dict[str, Dict] = {}
+
+async def run_blocking_io(func, *args):
+    """
+    Helper function to run blocking I/O operations in the executor.
+    """
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(executor, func, *args)
 
 @app.post("/api/openai")
 async def openai_stream(request: Request):
     """
-    Endpoint to handle OpenAI streaming requests.
-    Receives a JSON payload, processes it, and returns a streamed response.
+    Endpoint to handle OpenAI streaming and TTS processing.
+    Automatically stops all existing streams before starting a new one.
     """
-    stop_event.set()  # Trigger the stop event to halt any ongoing processes
+    logger.info("Received new /api/openai request. Stopping all existing streams...")
+    
+    # Stop all existing streams before starting a new one
+    await stop_all_streams()
+    
+    # Generate a unique stream ID for this request
+    stream_id = str(uuid.uuid4())
+    logger.info(f"Starting new stream with ID: {stream_id}")
 
-    # Ensure ongoing processes are fully stopped
-    await asyncio.sleep(0.1)  # Brief delay to ensure the stop signal is fully processed
+    # Create per-request stop event
+    stop_event = asyncio.Event()
 
-    stop_event.clear()  # Clear the stop event for the new request
+    # Parse request data
+    try:
+        data = await request.json()
+    except Exception as e:
+        logger.error(f"Invalid JSON payload: {e}")
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
 
-    data = await request.json()  # Parse JSON data from the request
-    messages = [{"role": msg["sender"], "content": msg["text"]} for msg in data.get('messages', [])]  # Extract messages
-    messages.insert(0, CONSTANTS["SYSTEM_PROMPT"])  # Add system prompt to the beginning of messages
+    messages = [{"role": msg["sender"], "content": msg["text"]} for msg in data.get("messages", [])]
+    messages.insert(0, Config.SYSTEM_PROMPT)  # Add system prompt
 
-    # Initialize queues for phrases and audio data
-    phrase_queue, audio_queue = asyncio.Queue(), queue.Queue()  # Use asyncio.Queue for async tasks, queue.Queue for threads
-    asyncio.create_task(process_streams(phrase_queue, audio_queue))  # Start the stream processing task
+    # Initialize queues for phrases and audio
+    phrase_queue = asyncio.Queue()
+    audio_queue = asyncio.Queue()
 
-    # Return a StreamingResponse with generated text from OpenAI
-    return StreamingResponse(stream_completion(messages, phrase_queue), media_type='text/plain')
+    # Create and store the processing tasks
+    process_task = asyncio.create_task(process_streams(stream_id, phrase_queue, audio_queue, stop_event))
 
-async def stream_completion(messages: List[dict], phrase_queue: asyncio.Queue, model: str = CONSTANTS["DEFAULT_RESPONSE_MODEL"]):
+    # Store stream details in the registry
+    active_streams[stream_id] = {
+        "stop_event": stop_event,
+        "task": process_task
+    }
+
+    # Create and return the streaming response
+    return StreamingResponse(
+        stream_completion(messages, phrase_queue, stop_event, stream_id),
+        media_type="text/plain"
+    )
+
+async def stream_completion(messages: List[dict], phrase_queue: asyncio.Queue, stop_event: asyncio.Event, stream_id: str):
+    """
+    Streams the completion from OpenAI and processes phrases.
+    """
     try:
         response = await aclient.chat.completions.create(
-            model=model,
+            model=Config.DEFAULT_RESPONSE_MODEL,
             messages=messages,
             stream=True,
-            temperature=CONSTANTS["TEMPERATURE"],
-            top_p=CONSTANTS["TOP_P"],
+            temperature=Config.TEMPERATURE,
+            top_p=Config.TOP_P,
         )
 
-        working_string = ""
-        in_code_block = False  # State to track if we are inside a code block
+        working_string, in_code_block = "", False
         async for chunk in response:
             if stop_event.is_set():
                 await phrase_queue.put(None)
                 break
 
-            content = ""
-            if chunk.choices and hasattr(chunk.choices[0].delta, 'content'):
-                content = chunk.choices[0].delta.content or ""
-
+            content = getattr(chunk.choices[0].delta, 'content', "") if chunk.choices else ""
             if content:
-                yield content  # Stream actual content to the frontend
-
+                yield content
                 working_string += content
+
                 while True:
                     if in_code_block:
-                        # We're inside a code block, look for the closing delimiter
                         code_block_end = working_string.find("```", 3)
                         if code_block_end != -1:
-                            # Found the end of the code block
-                            working_string = working_string[code_block_end + 3:]  # Remove the code block from the buffer
+                            working_string = working_string[code_block_end + 3:]
                             await phrase_queue.put("Code presented on screen")
                             in_code_block = False
                         else:
-                            break  # Wait for more content to complete the code block
+                            break
                     else:
-                        # Check for the start of a code block
                         code_block_start = working_string.find("```")
                         if code_block_start != -1:
-                            # Found the start of a code block
                             phrase, working_string = working_string[:code_block_start], working_string[code_block_start:]
                             if phrase.strip():
                                 await phrase_queue.put(phrase.strip())
                             in_code_block = True
                         else:
-                            # No code block, process regular text
                             next_phrase_end = find_next_phrase_end(working_string)
                             if next_phrase_end == -1:
                                 break
-
                             phrase, working_string = working_string[:next_phrase_end + 1].strip(), working_string[next_phrase_end + 1:]
                             await phrase_queue.put(phrase)
 
-        # Handle any remaining text in working_string as the final phrase
         if working_string.strip() and not in_code_block:
             await phrase_queue.put(working_string.strip())
         await phrase_queue.put(None)
 
     except Exception as e:
-        print(f"Error in stream_completion: {e}")
+        logger.error(f"Error in stream_completion (Stream ID: {stream_id}): {e}")
         await phrase_queue.put(None)
         yield f"Error: {e}"
 
+    finally:
+        # Cleanup after stream completion
+        await cleanup_stream(stream_id)
+
 def find_next_phrase_end(text: str) -> int:
-    # Find the next sentence delimiter after the minimum phrase length
-    sentence_delim_pos = [text.find(d, CONSTANTS["MINIMUM_PHRASE_LENGTH"]) for d in CONSTANTS["DELIMITERS"]]
+    """
+    Finds the end position of the next phrase based on delimiters.
+    """
+    sentence_delim_pos = [text.find(d, Config.MINIMUM_PHRASE_LENGTH) for d in Config.DELIMITERS]
     sentence_delim_pos = [pos for pos in sentence_delim_pos if pos != -1]
-    
     return min(sentence_delim_pos, default=-1)
 
-async def text_to_speech_processor(phrase_queue: asyncio.Queue, audio_queue: queue.Queue):
+async def text_to_speech_processor(phrase_queue: asyncio.Queue, audio_queue: asyncio.Queue, stop_event: asyncio.Event, stream_id: str):
     """
-    Processes phrases into speech using the OpenAI TTS model.
-    Streams audio chunks to the audio queue for playback.
+    Processes phrases from the phrase_queue and sends audio chunks to the audio_queue.
     """
     try:
         while not stop_event.is_set():
-            phrase = await phrase_queue.get()  # Get the next phrase from the queue
+            try:
+                phrase = await asyncio.wait_for(phrase_queue.get(), timeout=60.0)
+            except asyncio.TimeoutError:
+                logger.warning(f"Phrase queue get operation timed out (Stream ID: {stream_id})")
+                await audio_queue.put(None)
+                break
+
             if phrase is None:
-                audio_queue.put(None)  # Signal the end of audio processing
-                return
+                await audio_queue.put(None)
+                break
 
-            async with aclient.audio.speech.with_streaming_response.create(
-                model=CONSTANTS["DEFAULT_TTS_MODEL"],
-                voice=CONSTANTS["DEFAULT_VOICE"],
-                input=phrase,
-                speed=CONSTANTS["TTS_SPEED"],
-                response_format="pcm"
-            ) as response:
-                async for audio_chunk in response.iter_bytes(CONSTANTS["TTS_CHUNK_SIZE"]):
-                    if stop_event.is_set():
-                        return
-                    audio_queue.put(audio_chunk)  # Enqueue audio chunks for playback
-            audio_queue.put(b'\x00' * 2400)  # Add a short pause between sentences
+            try:
+                async with aclient.audio.speech.with_streaming_response.create(
+                    model=Config.DEFAULT_TTS_MODEL,
+                    voice=Config.DEFAULT_VOICE,
+                    input=phrase,
+                    speed=Config.TTS_SPEED,
+                    response_format="pcm"
+                ) as response:
+                    async for audio_chunk in response.iter_bytes(Config.TTS_CHUNK_SIZE):
+                        if stop_event.is_set():
+                            break
+                        await audio_queue.put(audio_chunk)
+                await audio_queue.put(b'\x00' * 2400)  # Silent padding
+            except Exception as e:
+                logger.error(f"Error in TTS processing (Stream ID: {stream_id}): {e}")
+                await audio_queue.put(None)
+                break
+
     except Exception as e:
-        print(f"Error in TTS processing: {e}")
-        audio_queue.put(None)  # Signal an error
+        logger.error(f"Unexpected error in TTS processor (Stream ID: {stream_id}): {e}")
 
-def audio_player(audio_queue: queue.Queue):
+    finally:
+        # Signal audio player to stop
+        await audio_queue.put(None)
+
+async def audio_player(audio_queue: asyncio.Queue, stop_event: asyncio.Event, stream_id: str):
     """
-    Plays audio data from the audio queue using PyAudio.
-    Runs in a separate thread.
+    Plays audio chunks from the audio_queue using PyAudio.
     """
     stream = None
     try:
         stream = p.open(
-            format=CONSTANTS["AUDIO_FORMAT"],
-            channels=CONSTANTS["CHANNELS"],
-            rate=CONSTANTS["RATE"],
+            format=Config.AUDIO_FORMAT,
+            channels=Config.CHANNELS,
+            rate=Config.RATE,
             output=True,
-            frames_per_buffer=2048  # Increase this if necessary
+            frames_per_buffer=2048
         )
-
-        stream.write(b'\x00' * 2048)  # Pre-fill buffer with silence
+        await run_blocking_io(stream.write, b'\x00' * 2048)  # Initial silent buffer
 
         while not stop_event.is_set():
-            audio_data = audio_queue.get()  # Get the next chunk of audio data
+            try:
+                audio_data = await asyncio.wait_for(audio_queue.get(), timeout=60.0)
+            except asyncio.TimeoutError:
+                logger.warning(f"Audio queue get operation timed out (Stream ID: {stream_id})")
+                break
+
             if audio_data is None:
-                break  # Exit if there's no more audio data
-            stream.write(audio_data)  # Play the audio data
+                break
+
+            await run_blocking_io(stream.write, audio_data)
     except Exception as e:
-        print(f"Error in audio player: {e}")
+        logger.error(f"Error in audio player (Stream ID: {stream_id}): {e}")
     finally:
         if stream:
-            stream.stop_stream()  # Stop the audio stream
-            stream.close()  # Close the audio stream
+            try:
+                await run_blocking_io(stream.stop_stream)
+                await run_blocking_io(stream.close)
+            except Exception as e:
+                logger.error(f"Error closing audio stream (Stream ID: {stream_id}): {e}")
 
-def start_audio_player(audio_queue: queue.Queue):
+async def process_streams(stream_id: str, phrase_queue: asyncio.Queue, audio_queue: asyncio.Queue, stop_event: asyncio.Event):
     """
-    Starts the audio player in a separate thread.
+    Processes the streams by running TTS and audio playback concurrently.
     """
-    threading.Thread(target=audio_player, args=(audio_queue,)).start()
+    tts_task = asyncio.create_task(text_to_speech_processor(phrase_queue, audio_queue, stop_event, stream_id))
+    audio_task = asyncio.create_task(audio_player(audio_queue, stop_event, stream_id))
+    try:
+        await asyncio.gather(tts_task, audio_task)
+    except asyncio.CancelledError:
+        logger.info(f"Process streams tasks cancelled (Stream ID: {stream_id})")
+    except Exception as e:
+        logger.error(f"Error in process_streams (Stream ID: {stream_id}): {e}")
+    finally:
+        # Cleanup after processing
+        await cleanup_stream(stream_id)
 
-async def process_streams(phrase_queue: asyncio.Queue, audio_queue: queue.Queue):
+async def stop_all_streams():
     """
-    Manages the processing of text-to-speech and audio playback.
+    Stops all active streams by setting their stop events and cancelling their tasks.
     """
-    tts_task = asyncio.create_task(text_to_speech_processor(phrase_queue, audio_queue))  # Start the TTS processor
-    start_audio_player(audio_queue)  # Start the audio player thread
-    await tts_task  # Wait for TTS processing to complete
+    if not active_streams:
+        logger.info("No active streams to stop.")
+        return
 
-@app.post("/api/stop")
-async def stop_tts():
-    """
-    Endpoint to stop the TTS and audio playback gracefully.
-    """
-    stop_event.set()
-    return {"status": "Stopping"}
+    logger.info("Stopping all active streams...")
+    # Iterate through all active streams and set their stop events
+    for stream_id, stream_info in active_streams.items():
+        logger.info(f"Stopping stream ID: {stream_id}")
+        stream_info["stop_event"].set()
 
-def wait_for_enter():
-    """
-    Waits for the Enter key press to stop the TTS operation.
-    """
-    while True:
-        input()
-        stop_event.set()
-        print("TTS stop triggered")
+    # Cancel all tasks
+    for stream_id, stream_info in active_streams.items():
+        task = stream_info["task"]
+        task.cancel()
 
-if __name__ == '__main__':
-    threading.Thread(target=wait_for_enter, daemon=True).start()
+    # Optionally, wait for all tasks to finish
+    await asyncio.sleep(0.1)  # Give some time for tasks to handle cancellation
 
+    # Clear the registry
+    active_streams.clear()
+    logger.info("All active streams have been stopped.")
+
+async def cleanup_stream(stream_id: str):
+    """
+    Removes the stream from the active_streams registry.
+    """
+    if stream_id in active_streams:
+        del active_streams[stream_id]
+        logger.info(f"Cleaned up stream with ID: {stream_id}")
+
+@app.post("/api/stop_all")
+async def stop_all_streams_endpoint():
+    """
+    Endpoint to stop all ongoing TTS processing and audio playback.
+    """
+    await stop_all_streams()
+    return {"status": "All active streams have been stopped."}
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """
+    Cleanup resources on application shutdown.
+    """
+    logger.info("Shutting down application...")
+    # Stop all active streams
+    await stop_all_streams()
+
+    # Terminate PyAudio
+    p.terminate()
+    executor.shutdown(wait=True)
+    logger.info("Shutdown complete.")
+
+# Optional: Endpoint to stop a specific stream (by stream_id)
+@app.post("/api/stop/{stream_id}")
+async def stop_specific_stream(stream_id: str):
+    """
+    Endpoint to stop a specific stream by its ID.
+    """
+    if stream_id not in active_streams:
+        logger.warning(f"Attempted to stop non-existent stream ID: {stream_id}")
+        raise HTTPException(status_code=404, detail="Stream ID not found.")
+
+    logger.info(f"Stopping specific stream with ID: {stream_id}")
+    stream_info = active_streams[stream_id]
+    stream_info["stop_event"].set()
+    stream_info["task"].cancel()
+    await cleanup_stream(stream_id)
+
+    return {"status": f"Stream {stream_id} has been stopped."}
+
+if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host='0.0.0.0', port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8000)
