@@ -5,3 +5,10 @@ openai
 aiohttp
 simpleaudio
 pyaudio
+fastapi
+uvicorn
+pyaudio
+python-dotenv
+openai
+aioredis
+pydantic

@@ -1,14 +1,12 @@
-# main.py
-
 import asyncio
 import os
 import uuid
 import re
 import logging
-import time
+import time  # Ensure this is necessary
 
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional
+from typing import List, Dict
 
 from contextlib import asynccontextmanager
 
@@ -19,8 +17,6 @@ from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from openai import AsyncOpenAI
-
-from config.tts_service import AzureTTSConfig, TTSServiceConfig
 
 # Load environment variables from a .env file
 load_dotenv()
@@ -35,9 +31,12 @@ class Config:
     MINIMUM_PHRASE_LENGTH: int = 50
     TTS_CHUNK_SIZE: int = 1024
     DEFAULT_RESPONSE_MODEL: str = "gpt-4o-mini"
+    DEFAULT_TTS_MODEL: str = "tts-1"
+    DEFAULT_VOICE: str = "alloy"
     AUDIO_FORMAT: int = pyaudio.paInt16
     CHANNELS: int = 1
     RATE: int = 24000
+    TTS_SPEED: float = 1.0
     TEMPERATURE: float = 1.0
     TOP_P: float = 1.0
     DELIMITERS: List[str] = field(default_factory=lambda: [".", "?", "!"])
@@ -45,7 +44,6 @@ class Config:
         "role": "system",
         "content": "You are a helpful but witty and dry assistant"
     })
-    tts_service_config: TTSServiceConfig = field(default_factory=TTSServiceConfig.load_from_env)
     
     # Dynamically create the regex pattern based on DELIMITERS
     DELIMITER_REGEX: str = field(init=False)
@@ -56,10 +54,22 @@ class Config:
         self.DELIMITER_REGEX = f"[{escaped_delimiters}]"
         self.DELIMITER_PATTERN = re.compile(self.DELIMITER_REGEX)
 
+
 # Utility Functions
 def find_next_phrase_end(text: str, config: Config) -> int:
+    """
+    Finds the end position of the next phrase based on delimiters using regex.
+
+    Args:
+        text (str): The text to search within.
+        config (Config): Configuration instance.
+
+    Returns:
+        int: The index of the delimiter if found after the minimum phrase length; otherwise, -1.
+    """
     match = config.DELIMITER_PATTERN.search(text, pos=config.MINIMUM_PHRASE_LENGTH)
     return match.start() if match else -1
+
 
 # OpenAI Client
 class OpenAIClient:
@@ -125,9 +135,10 @@ class OpenAIClient:
         finally:
             logger.info(f"Stream completion ended for stream ID: {stream_id}")
 
+
 # Text-to-Speech Processor
 class TTSProcessor:
-    def __init__(self, client: OpenAIClient, config: TTSServiceConfig):
+    def __init__(self, client: OpenAIClient, config: Config):
         self.client = client
         self.config = config
 
@@ -140,14 +151,17 @@ class TTSProcessor:
                     break
 
                 try:
-                    if self.config.service_type == "openai":
-                        await self._process_openai_tts(phrase, audio_queue, stop_event, stream_id)
-                    elif self.config.service_type == "azure":
-                        await self._process_azure_tts(phrase, audio_queue, stop_event, stream_id)
-                    else:
-                        raise ValueError(f"Unsupported TTS service type: {self.config.service_type}")
-                    
-                    # Add silence at the end to indicate completion
+                    async with self.client.client.audio.speech.with_streaming_response.create(
+                        model=self.config.DEFAULT_TTS_MODEL,
+                        voice=self.config.DEFAULT_VOICE,
+                        input=phrase,
+                        speed=self.config.TTS_SPEED,
+                        response_format="pcm"
+                    ) as response:
+                        async for audio_chunk in response.iter_bytes(self.config.TTS_CHUNK_SIZE):
+                            if stop_event.is_set():
+                                break
+                            await audio_queue.put(audio_chunk)
                     await audio_queue.put(b'\x00' * 2400)
                 except Exception as e:
                     logger.error(f"Error in TTS processing (Stream ID: {stream_id}): {e}")
@@ -156,40 +170,12 @@ class TTSProcessor:
         finally:
             await audio_queue.put(None)
 
-    async def _process_openai_tts(self, phrase: str, audio_queue: asyncio.Queue, stop_event: asyncio.Event, stream_id: str):
-        async with self.client.client.audio.speech.with_streaming_response.create(
-            model=self.config.config.default_tts_model,
-            voice=self.config.config.default_voice,
-            input=phrase,
-            speed=self.config.config.speed,
-            response_format=self.config.config.response_format
-        ) as response:
-            async for audio_chunk in response.iter_bytes(self.config.config.chunk_size):
-                if stop_event.is_set():
-                    break
-                await audio_queue.put(audio_chunk)
-
-    async def _process_azure_tts(self, phrase: str, audio_queue: asyncio.Queue, stop_event: asyncio.Event, stream_id: str):
-        azure_config: AzureTTSConfig = self.config.config  # Type casting for clarity
-        voice = azure_config.select_voice()
-        async with self.client.client.audio.speech.with_streaming_response.create(
-            model=azure_config.default_tts_model,
-            voice=voice,
-            input=phrase,
-            speed=azure_config.speed,
-            response_format=azure_config.response_format
-        ) as response:
-            async for audio_chunk in response.iter_bytes(azure_config.chunk_size):
-                if stop_event.is_set():
-                    break
-                await audio_queue.put(audio_chunk)
 
 # Audio Player
 class AudioPlayer:
-    def __init__(self, config: Config, output_device_index: Optional[int] = None):
+    def __init__(self, config: Config):
         self.pyaudio_instance = pyaudio.PyAudio()
         self.config = config
-        self.output_device_index = output_device_index  # Optional: specify output device
 
     async def play(self, audio_queue: asyncio.Queue, stop_event: asyncio.Event, stream_id: str, start_time: float):
         stream = None
@@ -199,24 +185,16 @@ class AudioPlayer:
                 channels=self.config.CHANNELS,
                 rate=self.config.RATE,
                 output=True,
-                frames_per_buffer=self.config.TTS_CHUNK_SIZE,
-                output_device_index=self.output_device_index  # Specify device index if needed
+                frames_per_buffer=2048
             )
-            logger.info(f"Audio stream opened for Stream ID: {stream_id}")
+            await asyncio.to_thread(stream.write, b'\x00' * 2048)
 
             first_audio = True  # Flag to check for the first audio chunk
 
             while not stop_event.is_set():
                 audio_data = await audio_queue.get()
                 if audio_data is None:
-                    logger.info(f"No more audio data to play for Stream ID: {stream_id}")
                     break
-
-                # Save the first audio chunk to a file for verification
-                if first_audio:
-                    with open(f"first_audio_chunk_{stream_id}.pcm", "wb") as f:
-                        f.write(audio_data)
-                    logger.info(f"Saved first audio chunk to first_audio_chunk_{stream_id}.pcm for verification.")
 
                 # Measure time when the first audio data is processed
                 if first_audio:
@@ -224,7 +202,6 @@ class AudioPlayer:
                     logger.info(f"Time taken for the first audio to be heard: {elapsed_time:.2f} seconds")
                     first_audio = False  # Reset the flag after the first chunk is processed
 
-                logger.debug(f"Writing audio chunk of size {len(audio_data)} bytes for Stream ID: {stream_id}")
                 await asyncio.to_thread(stream.write, audio_data)
         except Exception as e:
             logger.error(f"Error in audio player (Stream ID: {stream_id}): {e}")
@@ -232,11 +209,10 @@ class AudioPlayer:
             if stream:
                 await asyncio.to_thread(stream.stop_stream)
                 await asyncio.to_thread(stream.close)
-                logger.info(f"Audio stream closed for Stream ID: {stream_id}")
 
     def terminate(self):
         self.pyaudio_instance.terminate()
-        logger.info("PyAudio instance terminated.")
+
 
 # Stream Manager
 class StreamManager:
@@ -288,6 +264,7 @@ class StreamManager:
                 await self.remove_stream(stream_id)
             return True
 
+
 # Application Lifecycle Manager
 class AppLifecycle:
     def __init__(self, stream_manager: StreamManager, audio_player: AudioPlayer):
@@ -304,6 +281,7 @@ class AppLifecycle:
             await self.stream_manager.stop_all()
             self.audio_player.terminate()
             logger.info("Shutdown complete.")
+
 
 # API Routes
 class API:
@@ -391,6 +369,7 @@ class API:
         finally:
             logger.info(f"Stream completion generator ended for stream ID: {stream_id}")
 
+
 # Main Application Setup
 def create_app() -> FastAPI:
     config = Config()
@@ -404,8 +383,8 @@ def create_app() -> FastAPI:
 
     openai_client = OpenAIClient(api_key=openai_api_key, config=config)
     stream_manager = StreamManager()
-    audio_player = AudioPlayer(config=config)  # Optionally, pass output_device_index
-    tts_processor = TTSProcessor(client=openai_client, config=config.tts_service_config)
+    audio_player = AudioPlayer(config=config)
+    tts_processor = TTSProcessor(client=openai_client, config=config)
     lifecycle = AppLifecycle(stream_manager=stream_manager, audio_player=audio_player)
     api = API(app, openai_client, tts_processor, audio_player, stream_manager, config)
 
@@ -422,6 +401,7 @@ def create_app() -> FastAPI:
     app.router.lifespan = lifecycle.lifespan
 
     return app
+
 
 # Initialize the app
 app = create_app()

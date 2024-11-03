@@ -56,7 +56,7 @@ const ChatWebsite = () => {
   // Function to send stop signal
   const sendStopSignal = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/stop', {
+      const response = await fetch('http://localhost:8000/api/stop_all', {
         method: 'POST',
       });
       if (!response.ok) {
