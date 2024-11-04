@@ -12,3 +12,9 @@ python-dotenv
 openai
 aioredis
 pydantic
+fastapi
+uvicorn
+pyaudio
+python-dotenv
+openai
+azure-cognitiveservices-speech

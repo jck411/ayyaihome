@@ -3,12 +3,13 @@ import os
 import uuid
 import re
 import logging
-import time  # Ensure this is necessary
+import time
 
 from dataclasses import dataclass, field
 from typing import List, Dict
 
 from contextlib import asynccontextmanager
+from abc import ABC, abstractmethod
 
 import pyaudio
 from dotenv import load_dotenv
@@ -44,11 +45,16 @@ class Config:
         "role": "system",
         "content": "You are a helpful but witty and dry assistant"
     })
-    
+
+    # Service Selection
+    AI_SERVICE: str = "openai"  # Default AI service
+    TTS_SERVICE: str = "openai"  # Default TTS service
+    AUDIO_PLAYER: str = "pyaudio"  # Default audio player
+
     # Dynamically create the regex pattern based on DELIMITERS
     DELIMITER_REGEX: str = field(init=False)
     DELIMITER_PATTERN: re.Pattern = field(init=False)
-    
+
     def __post_init__(self):
         escaped_delimiters = ''.join(re.escape(d) for d in self.DELIMITERS)
         self.DELIMITER_REGEX = f"[{escaped_delimiters}]"
@@ -71,13 +77,40 @@ def find_next_phrase_end(text: str, config: Config) -> int:
     return match.start() if match else -1
 
 
-# OpenAI Client
-class OpenAIClient:
+# Base Classes for AI, TTS, and Audio Player
+class AIService(ABC):
+    @abstractmethod
+    async def stream_completion(self, messages: List[dict], phrase_queue: asyncio.Queue,
+                                stop_event: asyncio.Event, stream_id: str):
+        pass
+
+
+class TTSService(ABC):
+    @abstractmethod
+    async def generate_speech(self, phrase_queue: asyncio.Queue, audio_queue: asyncio.Queue,
+                              stop_event: asyncio.Event, stream_id: str):
+        pass
+
+
+class AudioPlayerBase(ABC):
+    @abstractmethod
+    async def play_audio(self, audio_queue: asyncio.Queue, stop_event: asyncio.Event,
+                         stream_id: str, start_time: float):
+        pass
+
+    @abstractmethod
+    def terminate(self):
+        pass
+
+
+# OpenAI AI Service Implementation
+class OpenAIService(AIService):
     def __init__(self, api_key: str, config: Config):
         self.client = AsyncOpenAI(api_key=api_key)
         self.config = config
 
-    async def stream_completion(self, messages: List[dict], phrase_queue: asyncio.Queue, stop_event: asyncio.Event, stream_id: str):
+    async def stream_completion(self, messages: List[dict], phrase_queue: asyncio.Queue,
+                                stop_event: asyncio.Event, stream_id: str):
         try:
             response = await self.client.chat.completions.create(
                 model=self.config.DEFAULT_RESPONSE_MODEL,
@@ -136,13 +169,14 @@ class OpenAIClient:
             logger.info(f"Stream completion ended for stream ID: {stream_id}")
 
 
-# Text-to-Speech Processor
-class TTSProcessor:
-    def __init__(self, client: OpenAIClient, config: Config):
+# OpenAI TTS Service Implementation
+class OpenAITTSService(TTSService):
+    def __init__(self, client: OpenAIService, config: Config):
         self.client = client
         self.config = config
 
-    async def process(self, phrase_queue: asyncio.Queue, audio_queue: asyncio.Queue, stop_event: asyncio.Event, stream_id: str):
+    async def generate_speech(self, phrase_queue: asyncio.Queue, audio_queue: asyncio.Queue,
+                              stop_event: asyncio.Event, stream_id: str):
         try:
             while not stop_event.is_set():
                 phrase = await phrase_queue.get()
@@ -171,13 +205,14 @@ class TTSProcessor:
             await audio_queue.put(None)
 
 
-# Audio Player
-class AudioPlayer:
+# PyAudio Player Implementation
+class PyAudioPlayer(AudioPlayerBase):
     def __init__(self, config: Config):
         self.pyaudio_instance = pyaudio.PyAudio()
         self.config = config
 
-    async def play(self, audio_queue: asyncio.Queue, stop_event: asyncio.Event, stream_id: str, start_time: float):
+    async def play_audio(self, audio_queue: asyncio.Queue, stop_event: asyncio.Event,
+                         stream_id: str, start_time: float):
         stream = None
         try:
             stream = self.pyaudio_instance.open(
@@ -267,7 +302,7 @@ class StreamManager:
 
 # Application Lifecycle Manager
 class AppLifecycle:
-    def __init__(self, stream_manager: StreamManager, audio_player: AudioPlayer):
+    def __init__(self, stream_manager: StreamManager, audio_player: AudioPlayerBase):
         self.stream_manager = stream_manager
         self.audio_player = audio_player
 
@@ -285,10 +320,11 @@ class AppLifecycle:
 
 # API Routes
 class API:
-    def __init__(self, app: FastAPI, openai_client: OpenAIClient, tts_processor: TTSProcessor, audio_player: AudioPlayer, stream_manager: StreamManager, config: Config):
+    def __init__(self, app: FastAPI, ai_service: AIService, tts_service: TTSService,
+                 audio_player: AudioPlayerBase, stream_manager: StreamManager, config: Config):
         self.app = app
-        self.openai_client = openai_client
-        self.tts_processor = tts_processor
+        self.ai_service = ai_service
+        self.tts_service = tts_service
         self.audio_player = audio_player
         self.stream_manager = stream_manager
         self.config = config
@@ -321,10 +357,10 @@ class API:
             start_time = time.time()  # Record the start time here
 
             tts_task = asyncio.create_task(
-                self.tts_processor.process(phrase_queue, audio_queue, stop_event, stream_id)
+                self.tts_service.generate_speech(phrase_queue, audio_queue, stop_event, stream_id)
             )
             audio_task = asyncio.create_task(
-                self.audio_player.play(audio_queue, stop_event, stream_id, start_time)  # Pass the start_time to AudioPlayer
+                self.audio_player.play_audio(audio_queue, stop_event, stream_id, start_time)
             )
             process_task = asyncio.create_task(
                 self.process_streams(tts_task, audio_task, stream_id)
@@ -359,9 +395,10 @@ class API:
         finally:
             await self.stream_manager.remove_stream(stream_id)
 
-    async def stream_completion_generator(self, messages: List[dict], phrase_queue: asyncio.Queue, stop_event: asyncio.Event, stream_id: str):
+    async def stream_completion_generator(self, messages: List[dict], phrase_queue: asyncio.Queue,
+                                          stop_event: asyncio.Event, stream_id: str):
         try:
-            async for content in self.openai_client.stream_completion(messages, phrase_queue, stop_event, stream_id):
+            async for content in self.ai_service.stream_completion(messages, phrase_queue, stop_event, stream_id):
                 yield content
         except Exception as e:
             logger.error(f"Error in stream_completion_generator (Stream ID: {stream_id}): {e}")
@@ -376,17 +413,32 @@ def create_app() -> FastAPI:
     app = FastAPI()
 
     # Initialize components
-    openai_api_key = os.getenv("OPENAI_API_KEY")
-    if not openai_api_key:
-        logger.error("OPENAI_API_KEY is not set in environment variables.")
-        raise EnvironmentError("OPENAI_API_KEY is required.")
-
-    openai_client = OpenAIClient(api_key=openai_api_key, config=config)
     stream_manager = StreamManager()
-    audio_player = AudioPlayer(config=config)
-    tts_processor = TTSProcessor(client=openai_client, config=config)
+
+    # AI Service Selection
+    if config.AI_SERVICE == "openai":
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+        if not openai_api_key:
+            logger.error("OPENAI_API_KEY is not set in environment variables.")
+            raise EnvironmentError("OPENAI_API_KEY is required.")
+        ai_service = OpenAIService(api_key=openai_api_key, config=config)
+    else:
+        raise NotImplementedError(f"AI Service '{config.AI_SERVICE}' is not implemented")
+
+    # TTS Service Selection
+    if config.TTS_SERVICE == "openai":
+        tts_service = OpenAITTSService(client=ai_service, config=config)
+    else:
+        raise NotImplementedError(f"TTS Service '{config.TTS_SERVICE}' is not implemented")
+
+    # Audio Player Selection
+    if config.AUDIO_PLAYER == "pyaudio":
+        audio_player = PyAudioPlayer(config=config)
+    else:
+        raise NotImplementedError(f"Audio Player '{config.AUDIO_PLAYER}' is not implemented")
+
     lifecycle = AppLifecycle(stream_manager=stream_manager, audio_player=audio_player)
-    api = API(app, openai_client, tts_processor, audio_player, stream_manager, config)
+    api = API(app, ai_service, tts_service, audio_player, stream_manager, config)
 
     # Add Middleware
     app.add_middleware(
