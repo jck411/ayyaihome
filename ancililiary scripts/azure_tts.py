@@ -36,7 +36,7 @@ audio_config = speechsdk.audio.AudioOutputConfig(use_default_speaker=True)
 MINIMUM_PHRASE_LENGTH = 150
 TTS_CHUNK_SIZE = 1024
 DEFAULT_RESPONSE_MODEL = "gpt-4o-mini"
-DEFAULT_VOICE = "en-US-AIGenerate1Neural"
+DEFAULT_VOICE = "en-US-Andrew:DragonHDLatestNeural"
 AUDIO_FORMAT = pyaudio.paInt16
 CHANNELS = 1
 RATE = 24000
@@ -75,6 +75,7 @@ async def stream_completion(messages: List[dict], phrase_queue: asyncio.Queue, m
 
         async for chunk in response:
             if stop_event.is_set():
+                await phrase_queue.put(None)
                 return
 
             last_chunk = chunk
@@ -121,8 +122,9 @@ async def text_to_speech_processor(phrase_queue: asyncio.Queue, audio_queue: asy
         try:
             speech_config.speech_synthesis_voice_name = DEFAULT_VOICE
             speech_synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=audio_config)
-            result = speech_synthesizer.speak_text_async(phrase).get()
-
+            result_future = speech_synthesizer.speak_text_async(phrase)
+            result = await asyncio.to_thread(result_future.get)
+            
             if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
                 pass
             elif result.reason == speechsdk.ResultReason.Canceled:
@@ -168,9 +170,14 @@ async def openai_stream(request: Request):
             audio_player(audio_queue)
         )
 
-    asyncio.create_task(process_streams())
+    stream_task = asyncio.create_task(process_streams())
 
-    return StreamingResponse(stream_completion(formatted_messages, phrase_queue, model=DEFAULT_RESPONSE_MODEL), media_type='text/plain')
+    try:
+        return StreamingResponse(stream_completion(formatted_messages, phrase_queue, model=DEFAULT_RESPONSE_MODEL), media_type='text/plain')
+    except Exception as e:
+        stop_event.set()
+        stream_task.cancel()
+        raise e
 
 # Run the FastAPI app
 if __name__ == "__main__":

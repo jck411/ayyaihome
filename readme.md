@@ -50,3 +50,6 @@
 - The new service can be swapped in by changing the configuration.
 
 This refactoring achieves the goal of making your codebase flexible and maintainable, allowing for easy integration of new services without altering the core application logic.
+
+
+fuser -k 8000/tcp

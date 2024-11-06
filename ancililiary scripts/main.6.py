@@ -4,6 +4,7 @@ import uuid
 import re
 import logging
 import time
+import io
 
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Any, Type, AsyncIterator
@@ -18,6 +19,11 @@ from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from openai import AsyncOpenAI
+import azure.cognitiveservices.speech as speechsdk
+from azure.cognitiveservices.speech import SpeechSynthesizer, AudioDataStream, ResultReason
+import azure.cognitiveservices.speech as tts
+import asyncio
+from queue import Queue
 
 # Load environment variables from a .env file
 load_dotenv()
@@ -50,6 +56,17 @@ class TTSService(ABC):
     ):
         """Processes text to speech."""
         pass
+
+class PushAudioOutputStreamSampleCallback(tts.audio.PushAudioOutputStreamCallback):
+    def __init__(self, buffer):
+        self.buffer = buffer
+
+    def write(self, audio_buffer: memoryview) -> int:
+        self.buffer.put(audio_buffer.tobytes())
+        return audio_buffer.nbytes
+
+
+
 
 class AudioPlayerBase(ABC):
     @abstractmethod
@@ -85,12 +102,38 @@ class AIServiceConfig:
         "content": "You are a helpful but witty and dry assistant"
     })
 
+
+# Custom AudioDataset to handle synthesized audio
+class AudioDataset:
+    def __init__(self):
+        self.data: Dict[str, io.BytesIO] = {}
+
+    def add_audio(self, stream_id: str, audio_data: bytes):
+        if stream_id not in self.data:
+            self.data[stream_id] = io.BytesIO()
+        self.data[stream_id].write(audio_data)
+
+    def get_audio_chunks(self, stream_id: str, chunk_size: int):
+        if stream_id not in self.data:
+            raise ValueError(f"No audio found for stream ID: {stream_id}")
+        buffer = self.data[stream_id]
+        buffer.seek(0)
+        while True:
+            chunk = buffer.read(chunk_size)
+            if not chunk:
+                break
+            yield chunk
+
+    def clear_audio(self, stream_id: str):
+        if stream_id in self.data:
+            del self.data[stream_id]
+
 @dataclass
 class TTSServiceConfig:
     SERVICE: str = "openai"  # Options: 'openai', 'azure', etc.
     DEFAULT_TTS_MODEL: str = "tts-1"
-    DEFAULT_VOICE: str = "alloy"  # other options: echo, fable, onyx, nova, shimmer
-    RESPONSE_FORMAT: str = "pcm"  # options: "mp3", "opus", "aac", "flac"
+    DEFAULT_VOICE: str = "en-US-Andrew:DragonHDLatestNeural"  # Default Azure TTS voice
+    RESPONSE_FORMAT: str = "pcm"  # options: "pcm", "mp3", "opus", "aac", "flac"
 
 @dataclass
 class ResponseFormatConfig:
@@ -99,17 +142,22 @@ class ResponseFormatConfig:
 @dataclass
 class Config:
     # General Configurations
-    MINIMUM_PHRASE_LENGTH: int = 20
+    MINIMUM_PHRASE_LENGTH: int = 25
     TTS_CHUNK_SIZE: int = 1024
     AUDIO_FORMAT: int = pyaudio.paInt16
     CHANNELS: int = 1
     RATE: int = 24000
     TTS_SPEED: float = 1.0
     DELIMITERS: List[str] = field(default_factory=lambda: [".", "?", "!"])
+    TTS_CHUNK_SIZE: int = 1024
+    DEFAULT_VOICE: str = "en-US-Andrew:DragonHDLatestNeural"  # Default Azure TTS voice
+
+
+
 
     # Service Selection
     AI_SERVICE: str = "openai"        # Options: 'openai', 'anthropic', etc.
-    TTS_SERVICE: str = "openai"       # Options: 'openai', 'azure', etc.
+    TTS_SERVICE: str = "azure"       # Options: 'openai', 'azure', etc.
     AUDIO_PLAYER: str = "pyaudio"     # Options: 'pyaudio', 'sounddevice', etc.
 
     # Service-Specific Configurations
@@ -129,7 +177,6 @@ class Config:
     def get_ai_service_class(self) -> Type[AIService]:
         service_map = {
             'openai': OpenAIService,
-            'anthropic': AnthropicService,
             # Add other AI services here
         }
         service_class = service_map.get(self.AI_SERVICE.lower())
@@ -249,22 +296,6 @@ class OpenAIService(AIService):
         finally:
             logger.info(f"Stream completion ended for stream ID: {stream_id}")
 
-# Placeholder for AnthropicService
-class AnthropicService(AIService):
-    def __init__(self, api_key: str, config: Config):
-        # Initialize the Anthropic client
-        pass
-
-    async def stream_completion(
-        self, 
-        messages: List[dict], 
-        phrase_queue: asyncio.Queue, 
-        stop_event: asyncio.Event, 
-        stream_id: str
-    ) -> AsyncIterator[str]:
-        # Implement the Anthropic streaming completion logic
-        pass
-
 # TTS Service Implementations
 class OpenAITTSService(TTSService):
     def __init__(self, client: AIService, config: Config):
@@ -308,10 +339,13 @@ class OpenAITTSService(TTSService):
         finally:
             await audio_queue.put(None)
 
+
 class AzureTTSService(TTSService):
-    def __init__(self, client: AIService, config: Config):
-        # Initialize the Azure TTS client
-        pass
+    def __init__(self, azure_tts_api_key: str, azure_tts_region: str, config: Config):
+        self.speech_config = tts.SpeechConfig(subscription=azure_tts_api_key, region=azure_tts_region)
+        self.speech_config.set_speech_synthesis_output_format(tts.SpeechSynthesisOutputFormat.Raw24Khz16BitMonoPcm)
+        self.config = config
+        self.audio_queue = Queue()
 
     async def process(
         self, 
@@ -320,8 +354,52 @@ class AzureTTSService(TTSService):
         stop_event: asyncio.Event, 
         stream_id: str
     ):
-        # Implement the Azure TTS processing logic
-        pass
+        while not stop_event.is_set():
+            phrase = await phrase_queue.get()
+            if phrase is None:
+                await audio_queue.put(None)
+                return
+
+            try:
+                speech_config = self.speech_config
+                speech_config.speech_synthesis_voice_name = self.config.tts_service.DEFAULT_VOICE
+
+                # Create the callback and push stream
+                stream_callback = PushAudioOutputStreamSampleCallback(self.audio_queue)
+                push_stream = tts.audio.PushAudioOutputStream(stream_callback)
+                stream_config = tts.audio.AudioOutputConfig(stream=push_stream)
+
+                speech_synthesizer = tts.SpeechSynthesizer(speech_config=speech_config, audio_config=stream_config)
+
+                # Perform synthesis asynchronously
+                result_future = speech_synthesizer.speak_text_async(phrase)
+                loop = asyncio.get_event_loop()
+                result = await loop.run_in_executor(None, result_future.get)
+
+                if result.reason == tts.ResultReason.SynthesizingAudioCompleted:
+                    while not self.audio_queue.empty():
+                        chunk = self.audio_queue.get()
+                        await audio_queue.put(chunk)
+
+                    # Add silence to indicate the end of the current TTS output
+                    await audio_queue.put(b'\x00' * 2400)
+
+                elif result.reason == tts.ResultReason.Canceled:
+                    cancellation_details = result.cancellation_details
+                    logger.error(f"Speech synthesis canceled: {cancellation_details.reason}")
+                    if cancellation_details.reason == tts.CancellationReason.Error:
+                        logger.error(f"Error details: {cancellation_details.error_details}")
+                else:
+                    logger.error(f"Speech synthesis failed with reason: {result.reason}")
+
+            except Exception as e:
+                logger.error(f"Error in TTS processing (Stream ID: {stream_id}): {e}")
+                await audio_queue.put(None)
+                return
+
+        await audio_queue.put(None)
+
+
 
 # Audio Player Implementations
 class PyAudioPlayer(AudioPlayerBase):
@@ -608,13 +686,6 @@ def create_app() -> FastAPI:
             logger.error("OPENAI_API_KEY is not set in environment variables.")
             raise EnvironmentError("OPENAI_API_KEY is required.")
         ai_service = ai_service_class(api_key=openai_api_key, config=config)
-    elif config.AI_SERVICE.lower() == 'anthropic':
-        # Initialize AnthropicService
-        anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
-        if not anthropic_api_key:
-            logger.error("ANTHROPIC_API_KEY is not set in environment variables.")
-            raise EnvironmentError("ANTHROPIC_API_KEY is required.")
-        ai_service = ai_service_class(api_key=anthropic_api_key, config=config)
     else:
         raise ValueError(f"Unsupported AI_SERVICE: {config.AI_SERVICE}")
 
@@ -624,12 +695,12 @@ def create_app() -> FastAPI:
         tts_service = tts_service_class(client=ai_service, config=config)
     elif config.TTS_SERVICE.lower() == 'azure':
         # Initialize AzureTTSService
-        azure_tts_api_key = os.getenv("AZURE_TTS_API_KEY")
-        azure_tts_region = os.getenv("AZURE_TTS_REGION")
+        azure_tts_api_key = os.getenv("AZURE_SPEECH_KEY")
+        azure_tts_region = os.getenv("AZURE_REGION")
         if not azure_tts_api_key or not azure_tts_region:
-            logger.error("AZURE_TTS_API_KEY and AZURE_TTS_REGION must be set in environment variables.")
-            raise EnvironmentError("AZURE_TTS_API_KEY and AZURE_TTS_REGION are required for Azure TTS.")
-        tts_service = tts_service_class(client=ai_service, config=config)
+            logger.error("AZURE_SPEECH_KEY and AZURE_REGION must be set in environment variables.")
+            raise EnvironmentError("AZURE_SPEECH_KEY and AZURE_REGION are required for Azure TTS.")
+        tts_service = tts_service_class(azure_tts_api_key=azure_tts_api_key, azure_tts_region=azure_tts_region, config=config)
     else:
         raise ValueError(f"Unsupported TTS_SERVICE: {config.TTS_SERVICE}")
 

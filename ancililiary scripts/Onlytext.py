@@ -36,6 +36,11 @@ async def openai_stream(request: Request):
         media_type="text/plain"
     )
 
+@app.post("/api/stop")
+async def stop_tts():
+    # This endpoint is not implemented in this version, but can be added later if needed
+    return {"status": "Stopping"}
+
 async def stream_completion(messages: list):
     try:
         response = await aclient.chat.completions.create(
@@ -52,3 +57,7 @@ async def stream_completion(messages: list):
     except Exception as e:
         logger.error(f"Error in stream_completion: {e}")
         yield f"Error: {e}"
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("Onlytext:app", host="0.0.0.0", port=8000, reload=True)
