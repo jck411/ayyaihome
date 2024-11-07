@@ -1,7 +1,6 @@
 from backend.config import client, default_model
 from backend.TTS.RTTTS_openai import play_text_stream  # Corrected function name
 
-
 def generate_text_stream_sync(messages):
     """
     Synchronous generator function for text stream from OpenAI.

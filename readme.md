@@ -53,3 +53,38 @@ This refactoring achieves the goal of making your codebase flexible and maintain
 
 
 fuser -k 8000/tcp
+
+git add .
+
+git commit -m "comment" 
+
+git push -u origin startagain.2
+
+
+
+git reset --hard HEAD
+
+
+export PYTHONPATH=$(pwd)
+/home/jack/aaaVENVs/aihome/bin/python3 backend/main.py
+
+
+1. Check the Working Directory
+Python needs to be aware of the root directory of your project. Make sure you're running the script from the project's root (one level above backend), not inside the backend folder.
+Try this command from the project root directory:
+bash
+Copy code
+/home/jack/aaaVENVs/aihome/bin/python3 backend/main.py
+2. Set the PYTHONPATH Environment Variable
+You can set PYTHONPATH to include the project directory, so Python knows where to look for backend.
+Run the following command from the project root directory:
+bash
+Copy code
+export PYTHONPATH=$(pwd)
+/home/jack/aaaVENVs/aihome/bin/python3 backend/main.py
+This tells Python to add the current directory ($(pwd)) to the module search path.
+3. Use __init__.py in Directories
+Ensure that backend and any subdirectories in your project have an __init__.py file. This file can be empty but is needed to treat directories as packages in Python.
+4. Check for Circular Imports
+If there are any circular imports (modules importing each other), Python might throw errors. Make sure backend/routes.py does not have an import cycle with other files.
+After trying these steps, re-run your code and see if the issue is resolved.
