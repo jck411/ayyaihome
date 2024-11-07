@@ -23,6 +23,9 @@ Thumbs.db
 # Google key
 backend/pihome123-0ce119dee066.json
 
+backend/keyfile.json
+
+
 # Testing
 coverage
 

@@ -1,5 +1,6 @@
 from backend.config import client, default_model
 from backend.TTS.RTTTS_openai import play_text_stream  # Corrected function name
+from backend.TTS.RTTTS_azure import play_text_stream
 
 def generate_text_stream_sync(messages):
     """
