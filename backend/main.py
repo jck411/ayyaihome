@@ -20,7 +20,8 @@ from backend.config import Config, get_openai_client  # Absolute import
 load_dotenv()
 
 # Load configuration from YAML file
-CONFIG_PATH = "/home/jack/ayyaihome/backend/config.yaml"
+CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.yaml")
+
 try:
     with open(CONFIG_PATH, 'r') as config_file:
         config_data = yaml.safe_load(config_file)
@@ -91,13 +92,12 @@ async def openai_stream(request: Request):
         request_timestamp=request_timestamp
     ))
 
-    # Return streaming response
+    # Return streaming response without the `model` argument
     return StreamingResponse(
         stream_completion(
             messages=messages,
             phrase_queue=phrase_queue,
-            request_timestamp=request_timestamp,
-            model=Config.RESPONSE_MODEL  # Using model from Config.RESPONSE_MODEL directly
+            request_timestamp=request_timestamp
         ),
         media_type='text/plain'
     )

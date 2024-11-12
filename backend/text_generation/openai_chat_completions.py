@@ -13,21 +13,19 @@ async def stream_completion(
     messages: List[Dict[str, str]],
     phrase_queue: asyncio.Queue,
     request_timestamp: float,
-    model: str = Config.RESPONSE_MODEL,
     openai_client: Optional[AsyncOpenAI] = None
 ):
-    
-    
     """
     Streams the completion from OpenAI and handles phrase segmentation.
     """
     openai_client = openai_client or get_openai_client()
     working_string = ""
     first_text_timestamp = None  # Initialize the first text timestamp
-    
+
     try:
+        # Use model from Config.RESPONSE_MODEL, which loads from config.yaml
         response = await openai_client.chat.completions.create(
-            model=model,
+            model=Config.RESPONSE_MODEL,  # Directly using model from Config
             messages=messages,
             stream=True,
             temperature=Config.TEMPERATURE,
