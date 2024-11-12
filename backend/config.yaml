@@ -1,0 +1,35 @@
+GENERAL_TTS:
+  TTS_CHUNK_SIZE: 1024  # Possible values: any positive integer (e.g., 512, 2048); depends on buffer size requirements
+  DELIMITERS: [". ", "? ", "! "]  # Possible values: list of string delimiters; commonly punctuation used to segment text
+
+TTS_MODELS:
+  OPENAI_TTS:
+    TTS_SPEED: 1.0  # Possible values: 0.5 (slower) to 2.0 (faster); 1.0 is standard speed
+    TTS_VOICE: "alloy"  # Possible values:  alloy, echo, fable, onyx, nova, and shimmer. 
+    TTS_MODEL: "tts-1"  # Possible values: model-specific, e.g., "tts-1", "tts-2"
+    AUDIO_RESPONSE_FORMAT: "pcm"  # Possible values: "pcm" (default), "mp3", "wav"; audio encoding formats
+
+LLM_MODEL_CONFIG:
+  OPENAI:
+    RESPONSE_MODEL: "gpt-4o-mini"  # Possible values: "gpt-4o-mini", "gpt-3.5-turbo", "gpt-4"; depends on available models
+    TEMPERATURE: 1.0  # Possible values: 0.0 (deterministic) to 1.0 (random); controls creativity in responses
+    TOP_P: 1.0  # Possible values: 0.0 to 1.0; cumulative probability for nucleus sampling
+    N: 1  # Possible values: 1 or more; number of responses to generate
+    SYSTEM_PROMPT_CONTENT: "You are a helpful but witty and dry assistant"  # System message for setting assistant's tone
+    STREAM_OPTIONS:
+      include_usage: true  # Possible values: true, false; determines if usage data is included in the stream
+    STOP: null  # Possible values: list of stop strings or null; tokens that stop the generation
+    MAX_TOKENS: null  # Possible values: integer or null; maximum number of tokens in a response
+    PRESENCE_PENALTY: 0.0  # Possible values: -2.0 to 2.0; encourages/discourages introducing new topics
+    FREQUENCY_PENALTY: 0.0  # Possible values: -2.0 to 2.0; discourages/rewards repeating the same phrases
+    LOGIT_BIAS: null  # Possible values: dictionary of token biases or null; modifies likelihood of specific tokens
+    USER: null  # Possible values: user ID or null; optional user identifier
+    TOOLS: null  # Possible values: list of tool names or null; specifies which tools the assistant can use
+    TOOL_CHOICE: null  # Possible values: tool name or null; preferred tool for the response
+    MODALITIES:
+      - text  # Possible values: "text", "image", "audio"; types of input modalities supported
+
+AUDIO_PLAYBACK_CONFIG:
+  FORMAT: 8  # Possible values: integer (e.g., 8, 16, 32); represents bits per sample, typically 8 or 16 for PCM
+  CHANNELS: 1  # Possible values: 1 (mono), 2 (stereo); sets audio channels
+  RATE: 24000  # Possible values: integer (e.g., 16000, 24000, 44100); sample rate in Hz

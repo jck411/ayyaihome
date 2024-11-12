@@ -63,10 +63,21 @@ git push -u origin startagain.2
 
 
 git reset --hard HEAD
+git clean -f
+
+from root
+uvicorn backend.main:app --host 0.0.0.0 --port 8000
+
 
 
 export PYTHONPATH=$(pwd)
-/home/jack/aaaVENVs/aihome/bin/python3 backend/main.py
+/home/jack/aaaVENVs/aihome/bin/python3 backend/main.pys
+
+
+export PYTHONPATH=/home/jack/ayyaihome
+python /home/jack/ayyaihome/backend/main.py
+
+
 
 
 1. Check the Working Directory
