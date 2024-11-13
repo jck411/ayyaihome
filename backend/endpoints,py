@@ -1,0 +1,43 @@
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.responses import StreamingResponse
+import time
+import asyncio
+from backend.config import Config
+from backend.utils.request_utils import validate_and_prepare_for_openai_completion
+from backend.streams.process_streams import start_stream_processing
+from backend.text_generation.openai_chat_completions import stream_completion
+
+app = FastAPI()
+
+@app.post("/api/openai")
+async def openai_stream(request: Request):
+    """
+    Endpoint to handle OpenAI streaming requests.
+    """
+    request_timestamp = time.time()
+
+    # Input validation and message preparation for OpenAI completion
+    try:
+        messages = await validate_and_prepare_for_openai_completion(request)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    phrase_queue = asyncio.Queue()
+    audio_queue = asyncio.Queue()
+
+    # Start processing streams
+    asyncio.create_task(start_stream_processing(
+        phrase_queue=phrase_queue,
+        audio_queue=audio_queue,
+        request_timestamp=request_timestamp
+    ))
+
+    # Return streaming response
+    return StreamingResponse(
+        stream_completion(
+            messages=messages,
+            phrase_queue=phrase_queue,
+            request_timestamp=request_timestamp
+        ),
+        media_type='text/plain'
+    )
