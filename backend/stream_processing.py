@@ -8,11 +8,7 @@ from backend.audio_players.pyaudio import start_audio_player
 # Initialize logging
 logger = logging.getLogger(__name__)
 
-async def process_streams(
-    phrase_queue: asyncio.Queue,
-    audio_queue: queue.Queue,
-    request_timestamp: float
-):
+async def process_streams(phrase_queue: asyncio.Queue, audio_queue: queue.Queue, request_timestamp: float):
     """
     Manages the processing of text-to-speech and audio playback.
     """

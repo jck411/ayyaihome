@@ -1,3 +1,4 @@
+import time
 import os
 import asyncio
 import queue
@@ -28,22 +29,38 @@ async def chat_with_anthropic(request: Request):
     Endpoint for handling chat requests with Anthropic's API.
     """
     try:
-        # Parse the JSON payload from the incoming request
+        request_timestamp = time.time()
         payload = await request.json()
-        user_messages = payload.get("messages")  # Extract messages from payload
+        user_messages = payload.get("messages")
 
-        # Validate message format (must be a list of dictionaries with 'role' and 'content')
+        # Validate message format
         if not user_messages or not isinstance(user_messages, list) or not all(
             isinstance(msg, dict) and "role" in msg and "content" in msg and isinstance(msg["content"], str)
             for msg in user_messages):
-            # Raise error if message format is invalid
             raise HTTPException(status_code=400, detail="Invalid message format.")
 
-        # Call the Anthropic streaming function with the validated user messages
-        return await stream_anthropic_completion(user_messages)
+        # Initialize async and synchronous queues for processing streams
+        phrase_queue = asyncio.Queue()
+        audio_queue = queue.Queue()
+
+        # Start the process_streams task to handle real-time streaming
+        asyncio.create_task(process_streams(
+            phrase_queue=phrase_queue,
+            audio_queue=audio_queue,
+            request_timestamp=request_timestamp
+        ))
+
+        # Return the streaming response with the phrase_queue
+        return StreamingResponse(
+            stream_anthropic_completion(
+                messages=user_messages,
+                phrase_queue=phrase_queue,
+                request_timestamp=request_timestamp
+            ),
+            media_type='text/plain'
+        )
 
     except Exception as e:
-        # Log error details if an exception occurs and raise a 500 error
         logger.error(f"Error in Anthropic API: {e}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
