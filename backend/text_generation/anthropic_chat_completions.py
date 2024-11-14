@@ -1,18 +1,36 @@
-import anthropic
 import asyncio
-from typing import List
+from anthropic import AsyncAnthropic
+from fastapi import HTTPException
+from fastapi.responses import StreamingResponse
+from backend.config import Config  # Import the Config class directly
 
-client = anthropic.Anthropic()
+client = AsyncAnthropic()
 
-async def stream_completion(messages: List[dict], system: str, phrase_queue: asyncio.Queue, request_timestamp: float):
+async def stream_anthropic_completion(messages: list):
     """
-    Handles message streaming for the Anthropic service.
+    Streams responses from the Anthropic API.
+
+    Args:
+        messages (list): The list of message dicts with 'role' and 'content' keys.
+        
+    Returns:
+        StreamingResponse: A response that streams data to the client.
     """
-    response = client.messages.create(
-        model="claude-3-5-sonnet-20241022",
-        max_tokens=2048,
-        system=system,
-        messages=messages
-    )
-    # Code to stream response to phrase_queue
-    # Implementation will depend on the Anthropic SDK's capabilities for streaming
+    try:
+        async def event_generator():
+            async with client.messages.stream(
+                max_tokens=Config.ANTHROPIC_MAX_TOKENS,
+                messages=messages,
+                model=Config.ANTHROPIC_RESPONSE_MODEL,
+                system=Config.ANTHROPIC_SYSTEM_PROMPT,  
+                temperature=Config.ANTHROPIC_TEMPERATURE,
+                top_p=Config.ANTHROPIC_TOP_P,
+                stop_sequences=Config.ANTHROPIC_STOP_SEQUENCES,
+            ) as stream:
+                async for text_chunk in stream.text_stream:
+                    yield text_chunk
+
+        return StreamingResponse(event_generator(), media_type="text/plain")
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error calling Anthropic API: {str(e)}")

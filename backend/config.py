@@ -1,5 +1,3 @@
-# /home/jack/ayyaihome/backend/config.py
-
 import os
 import yaml
 import logging
@@ -38,7 +36,7 @@ class Config:
     TTS_MODEL = OPENAI_TTS_CONFIG.get('TTS_MODEL', "tts-1")
     AUDIO_RESPONSE_FORMAT = OPENAI_TTS_CONFIG.get('AUDIO_RESPONSE_FORMAT', "pcm")
 
-    # LLM_MODEL_CONFIG
+    # LLM_MODEL_CONFIG - OpenAI
     LLM_CONFIG = config_data.get('LLM_MODEL_CONFIG', {}).get('OPENAI', {})
     RESPONSE_MODEL = LLM_CONFIG.get('RESPONSE_MODEL', "gpt-4o-mini")
     TEMPERATURE = LLM_CONFIG.get('TEMPERATURE', 1.0)
@@ -55,6 +53,19 @@ class Config:
     TOOLS = LLM_CONFIG.get('TOOLS', None)
     TOOL_CHOICE = LLM_CONFIG.get('TOOL_CHOICE', None)
     MODALITIES = LLM_CONFIG.get('MODALITIES', ["text"])
+
+    # LLM_MODEL_CONFIG - Anthropic
+    ANTHROPIC_CONFIG = config_data.get('LLM_MODEL_CONFIG', {}).get('ANTHROPIC', {})
+    ANTHROPIC_RESPONSE_MODEL = ANTHROPIC_CONFIG.get('RESPONSE_MODEL', "claude-3-haiku-20240307")
+    ANTHROPIC_TEMPERATURE = ANTHROPIC_CONFIG.get('TEMPERATURE', 0.7)
+    ANTHROPIC_TOP_P = ANTHROPIC_CONFIG.get('TOP_P', 0.9)
+    ANTHROPIC_SYSTEM_PROMPT = ANTHROPIC_CONFIG.get('SYSTEM_PROMPT', "you rhyme all of your replies")
+    ANTHROPIC_MAX_TOKENS = ANTHROPIC_CONFIG.get('MAX_TOKENS', 1024)
+    ANTHROPIC_STOP_SEQUENCES = ANTHROPIC_CONFIG.get('STOP_SEQUENCES', None)
+    ANTHROPIC_STREAM_OPTIONS = ANTHROPIC_CONFIG.get('STREAM_OPTIONS', {"include_usage": True})
+
+    # Log the Anthropic system prompt
+    logger.info(f"Anthropic System Prompt Loaded: {ANTHROPIC_SYSTEM_PROMPT}")
 
     # AUDIO_PLAYBACK_CONFIG
     AUDIO_FORMAT = config_data.get('AUDIO_PLAYBACK_CONFIG', {}).get('FORMAT', 8)
