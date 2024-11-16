@@ -12,7 +12,9 @@ from backend.text_generation.openai_chat_completions import stream_completion  #
 from backend.text_generation.anthropic_chat_completions import stream_anthropic_completion  # Import Anthropic streaming function
 
 from backend.stream_processing import process_streams  # Import stream processing function
-from anthropic import AsyncAnthropic  # Import Anthropic's asynchronous client
+from anthropic import AsyncAnthropic
+
+from backend.utils.request_utils import validate_and_prepare_for_anthropic, validate_and_prepare_for_openai_completion  # Import Anthropic's asynchronous client
 
 
 # Initialize logging for error tracking and debugging
@@ -30,14 +32,9 @@ async def chat_with_anthropic(request: Request):
     """
     try:
         request_timestamp = time.time()
-        payload = await request.json()
-        user_messages = payload.get("messages")
 
-        # Validate message format
-        if not user_messages or not isinstance(user_messages, list) or not all(
-            isinstance(msg, dict) and "role" in msg and "content" in msg and isinstance(msg["content"], str)
-            for msg in user_messages):
-            raise HTTPException(status_code=400, detail="Invalid message format.")
+        # Validate and prepare request
+        user_messages = await validate_and_prepare_for_anthropic(request)
 
         # Initialize async and synchronous queues for processing streams
         phrase_queue = asyncio.Queue()
@@ -64,45 +61,37 @@ async def chat_with_anthropic(request: Request):
         logger.error(f"Error in Anthropic API: {e}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
-#@router.post("/api/chat")
+
+
+@router.post("/api/chat")
 async def openai_stream(request: Request):
-    """
-    Endpoint to handle OpenAI streaming requests.
-    """
-    # Input validation for OpenAI streaming request
     try:
-        # Parse the JSON payload from the request
-        data = await request.json()
-        messages = data.get('messages', [])  # Extract messages from payload
-        if not isinstance(messages, list):
-            # Raise error if messages are not in list format
-            raise ValueError("Messages must be a list.")
-        # Reformat messages to match OpenAI's expected input format
-        messages = [{"role": msg["sender"], "content": msg["text"]} for msg in messages]
+        # Use the validation function
+        messages = await validate_and_prepare_for_openai_completion(request)
+        
+        # Initialize async and synchronous queues for processing streams
+        phrase_queue = asyncio.Queue()
+        audio_queue = queue.Queue()
+
+        # Start the process_streams task to handle real-time streaming
+        request_timestamp = time.time()
+
+        asyncio.create_task(process_streams(
+            phrase_queue=phrase_queue,
+            audio_queue=audio_queue,
+            request_timestamp=request_timestamp
+        ))
+
+        # Pass the request_timestamp to stream_completion
+        return StreamingResponse(
+            stream_completion(
+                messages=messages,
+                phrase_queue=phrase_queue,
+                request_timestamp=request_timestamp
+            ),
+            media_type='text/plain'
+        )
+
     except Exception as e:
-        # Log error details if an exception occurs and raise a 400 error
-        logger.error(f"Invalid input data: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
-
-    # Insert a system prompt at the beginning of the messages list
-    system_prompt = {"role": "system", "content": Config.SYSTEM_PROMPT_CONTENT}
-    messages.insert(0, system_prompt)
-
-    # Initialize async and synchronous queues for processing streams
-    phrase_queue = asyncio.Queue()
-    audio_queue = queue.Queue()
-
-    # Start the process_streams task to handle real-time streaming
-    asyncio.create_task(process_streams(
-        phrase_queue=phrase_queue,
-        audio_queue=audio_queue
-    ))
-
-    # Return the streaming response without specifying the `model` argument
-    return StreamingResponse(
-        stream_completion(
-            messages=messages,
-            phrase_queue=phrase_queue
-        ),
-        media_type='text/plain'
-    )
+        logger.error(f"Error in OpenAI API: {e}")
+        raise HTTPException(status_code=500, detail="Internal Server Error")

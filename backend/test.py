@@ -1,94 +1,107 @@
-streaming endpoints for each
-
 import os
 import asyncio
-import queue
-import time
-import logging
-from fastapi import APIRouter, Request, HTTPException
-from fastapi.responses import StreamingResponse, PlainTextResponse
+from dotenv import load_dotenv
+import azure.cognitiveservices.speech as speechsdk
+from openai import AsyncOpenAI
 
-from backend.config import Config
-from backend.text_generation.openai_chat_completions import stream_completion
-from backend.stream_processing import process_streams  # Updated import for process_streams
-from anthropic import AsyncAnthropic
+# Load environment variables from .env file
+load_dotenv()
 
+# Fetch API keys from environment variables
+api_key = os.getenv("OPENAI_API_KEY")
+azure_key = os.getenv("AZURE_SPEECH_KEY")
+azure_region = os.getenv("AZURE_REGION")
 
-# Initialize logging
-logger = logging.getLogger(__name__)
+if not all([api_key, azure_key, azure_region]):
+    raise EnvironmentError("Missing required environment variables.")
 
-router = APIRouter()
-client = AsyncAnthropic()
+# OpenAI Client
+client = AsyncOpenAI(api_key=api_key)
 
-@router.post("/api/chat")
-async def chat_with_anthropic(request: Request):
-    try:
-        # Parse and log the JSON payload
-        payload = await request.json()
-        print("Received Payload:", payload)  # Debugging line
-        user_messages = payload.get("messages")
+# Azure TTS Configuration
+speech_config = speechsdk.SpeechConfig(subscription=azure_key, region=azure_region)
+speech_config.speech_synthesis_voice_name = "en-US-Andrew:DragonHDLatestNeural"  # Set default voice
+MINIMUM_PHRASE_LENGTH = 100  # Minimum length of a phrase before processing
+DELIMITERS = [".", "?", "!"]
 
-        # Ensure messages exist and are properly formatted
-        if not user_messages or not isinstance(user_messages, list) or not all(
-            isinstance(msg, dict) and "role" in msg and "content" in msg and isinstance(msg["content"], str) 
-            for msg in user_messages):
-            raise HTTPException(status_code=400, detail="Invalid message format. Each message must be a dict with 'role' and non-empty 'content' fields.")
-
-        # Define an async generator that streams the response
-        async def event_generator():
-            async with client.messages.stream(
-                max_tokens=1024,
-                messages=user_messages,
-                model="claude-3-opus-20240229",
-            ) as stream:
-                async for text_chunk in stream.text_stream:
-                    yield text_chunk  # Yield each chunk to the client
-
-        # Return a StreamingResponse
-        return StreamingResponse(event_generator(), media_type="text/plain")
-
-    except Exception as e:
-        print(f"Error while calling Anthropic API: {e}")
-        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
-
-#@router.post("/api/chat")
-async def openai_stream(request: Request):
+# Function to split streaming content into phrases
+def split_text_into_phrases(streaming_text: str, buffer: str) -> tuple[list[str], str]:
     """
-    Endpoint to handle OpenAI streaming requests.
+    Splits streaming text into phrases based on delimiters and minimum length.
+    Args:
+        streaming_text (str): Incoming text from the stream.
+        buffer (str): Buffer holding unprocessed text from previous iterations.
+    Returns:
+        tuple[list[str], str]: A list of complete phrases and the remaining buffer text.
     """
-    request_timestamp = time.time()
+    buffer += streaming_text
+    phrases = []
+    while len(buffer) >= MINIMUM_PHRASE_LENGTH:
+        for delimiter in DELIMITERS:
+            index = buffer.find(delimiter, MINIMUM_PHRASE_LENGTH)
+            if index != -1:
+                phrases.append(buffer[: index + 1].strip())
+                buffer = buffer[index + 1:].strip()
+                break
+        else:
+            break
+    return phrases, buffer
 
-    # Input validation
-    try:
-        data = await request.json()
-        messages = data.get('messages', [])
-        if not isinstance(messages, list):
-            raise ValueError("Messages must be a list.")
-        messages = [{"role": msg["sender"], "content": msg["text"]} for msg in messages]
-    except Exception as e:
-        logger.error(f"Invalid input data: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
+# Function to convert a single phrase to speech
+async def text_to_speech(phrase: str) -> bytes:
+    """
+    Converts a single phrase to speech audio using Azure TTS.
+    Args:
+        phrase (str): The input phrase to synthesize.
+    Returns:
+        bytes: The synthesized audio data.
+    """
+    audio_config = speechsdk.audio.AudioOutputConfig(use_default_speaker=True)
+    speech_synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=audio_config)
+    result_future = speech_synthesizer.speak_text_async(phrase)
+    result = await asyncio.to_thread(result_future.get)
 
-    # Insert system prompt
-    system_prompt = {"role": "system", "content": Config.SYSTEM_PROMPT_CONTENT}
-    messages.insert(0, system_prompt)
+    if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
+        return result.audio_data
+    elif result.reason == speechsdk.ResultReason.Canceled:
+        cancellation_details = result.cancellation_details
+        raise Exception(f"TTS canceled: {cancellation_details.reason} - {cancellation_details.error_details}")
+    else:
+        raise Exception("Unknown TTS error occurred.")
 
-    phrase_queue = asyncio.Queue()
-    audio_queue = queue.Queue()
-
-    # Start processing streams
-    asyncio.create_task(process_streams(
-        phrase_queue=phrase_queue,
-        audio_queue=audio_queue,
-        request_timestamp=request_timestamp
-    ))
-
-    # Return streaming response without the `model` argument
-    return StreamingResponse(
-        stream_completion(
-            messages=messages,
-            phrase_queue=phrase_queue,
-            request_timestamp=request_timestamp
-        ),
-        media_type='text/plain'
+# Main function to stream OpenAI responses and process them with TTS
+async def process_streamed_text_to_speech():
+    """
+    Streams text from OpenAI API and processes it into speech using Azure TTS.
+    """
+    buffer = ""  # Holds unprocessed text
+    completion = await client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "Tell me a 100-word story about streaming."}
+        ],
+        temperature=0.5,
+        max_tokens=256,
+        stream=True
     )
+
+    # Process chunks from OpenAI stream
+    async for chunk in completion:
+        # Extract content from the stream
+        if "content" in chunk.choices[0].delta:
+            streaming_text = chunk.choices[0].delta.content
+            # Split text into phrases
+            phrases, buffer = split_text_into_phrases(streaming_text, buffer)
+            for phrase in phrases:
+                print(f"Processing phrase: {phrase}")
+                await text_to_speech(phrase)
+
+    # Process any remaining text in the buffer
+    if buffer.strip():
+        print(f"Processing final buffer: {buffer}")
+        await text_to_speech(buffer)
+
+# Run the main function
+if __name__ == "__main__":
+    asyncio.run(process_streamed_text_to_speech())

@@ -25,16 +25,32 @@ logger = logging.getLogger(__name__)
 # Configuration parameters
 class Config:
     # GENERAL_TTS
+    TTS_PROVIDER = config_data.get('GENERAL_TTS', {}).get('TTS_PROVIDER', "azure")  # Default to Azure
     TTS_CHUNK_SIZE = config_data.get('GENERAL_TTS', {}).get('TTS_CHUNK_SIZE', 1024)
     DELIMITERS = config_data.get('GENERAL_TTS', {}).get('DELIMITERS', [". ", "? ", "! "])
-    MINIMUM_PHRASE_LENGTH = config_data.get('GENERAL_TTS', {}).get('MINIMUM_PHRASE_LENGTH', 25)
+    MINIMUM_PHRASE_LENGTH = config_data.get('GENERAL_TTS', {}).get('MINIMUM_PHRASE_LENGTH', 25)  # Default: 25
 
-    # TTS_MODELS
+    # TTS_MODELS - OpenAI
     OPENAI_TTS_CONFIG = config_data.get('TTS_MODELS', {}).get('OPENAI_TTS', {})
-    TTS_SPEED = OPENAI_TTS_CONFIG.get('TTS_SPEED', 1.0)
-    TTS_VOICE = OPENAI_TTS_CONFIG.get('TTS_VOICE', "alloy")
-    TTS_MODEL = OPENAI_TTS_CONFIG.get('TTS_MODEL', "tts-1")
-    AUDIO_RESPONSE_FORMAT = OPENAI_TTS_CONFIG.get('AUDIO_RESPONSE_FORMAT', "pcm")
+    OPENAI_TTS_SPEED = OPENAI_TTS_CONFIG.get('TTS_SPEED', 1.0)
+    OPENAI_TTS_VOICE = OPENAI_TTS_CONFIG.get('TTS_VOICE', "onyx")
+    OPENAI_TTS_MODEL = OPENAI_TTS_CONFIG.get('TTS_MODEL', "tts-1")
+    OPENAI_AUDIO_RESPONSE_FORMAT = OPENAI_TTS_CONFIG.get('AUDIO_RESPONSE_FORMAT', "pcm")
+    OPENAI_PLAYBACK_RATE = OPENAI_TTS_CONFIG.get('PLAYBACK_RATE', 24000)
+
+    # TTS_MODELS - Azure
+    AZURE_TTS_CONFIG = config_data.get('TTS_MODELS', {}).get('AZURE_TTS', {})
+    AZURE_TTS_SPEED = AZURE_TTS_CONFIG.get('TTS_SPEED', 1.0)
+    AZURE_TTS_VOICE = AZURE_TTS_CONFIG.get('TTS_VOICE', "en-US-LewisMultilingualNeural")
+    AZURE_SAMPLE_RATE = AZURE_TTS_CONFIG.get('SAMPLE_RATE', 16000)
+    AZURE_AUDIO_FORMAT = AZURE_TTS_CONFIG.get('AUDIO_FORMAT', "Raw16Khz16BitMonoPcm")
+    AZURE_DYNAMIC_PAUSES = AZURE_TTS_CONFIG.get('DYNAMIC_PAUSES', {
+        "PERIOD": 0.3,
+        "COMMA": 0.2,
+        "QUESTION_MARK": 0.4,
+        "EXCLAMATION_MARK": 0.5
+    })
+    AZURE_PLAYBACK_RATE = AZURE_TTS_CONFIG.get('PLAYBACK_RATE', 16000)
 
     # LLM_MODEL_CONFIG - OpenAI
     LLM_CONFIG = config_data.get('LLM_MODEL_CONFIG', {}).get('OPENAI', {})
@@ -68,9 +84,18 @@ class Config:
     logger.info(f"Anthropic System Prompt Loaded: {ANTHROPIC_SYSTEM_PROMPT}")
 
     # AUDIO_PLAYBACK_CONFIG
-    AUDIO_FORMAT = config_data.get('AUDIO_PLAYBACK_CONFIG', {}).get('FORMAT', 8)
+    AUDIO_FORMAT = config_data.get('AUDIO_PLAYBACK_CONFIG', {}).get('FORMAT', 16)
     CHANNELS = config_data.get('AUDIO_PLAYBACK_CONFIG', {}).get('CHANNELS', 1)
-    RATE = config_data.get('AUDIO_PLAYBACK_CONFIG', {}).get('RATE', 24000)
+    DEFAULT_RATE = config_data.get('AUDIO_PLAYBACK_CONFIG', {}).get('RATE', 24000)  # Default if no provider-specific rate
+
+    # Determine dynamic playback rate based on TTS_PROVIDER
+    @staticmethod
+    def get_playback_rate():
+        if Config.TTS_PROVIDER == "openai":
+            return Config.OPENAI_PLAYBACK_RATE
+        elif Config.TTS_PROVIDER == "azure":
+            return Config.AZURE_PLAYBACK_RATE
+        raise ValueError(f"Unsupported TTS_PROVIDER: {Config.TTS_PROVIDER}")
 
 
 # Initialize the OpenAI API client using dependency injection

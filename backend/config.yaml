@@ -1,13 +1,28 @@
 GENERAL_TTS:
-  TTS_CHUNK_SIZE: 1024  # Possible values: any positive integer (e.g., 512, 2048); depends on buffer size requirements
-  DELIMITERS: [". ", "? ", "! "]  # Possible values: list of string delimiters; commonly punctuation used to segment text
+  TTS_PROVIDER: "openai"  # Possible values: "openai", "azure"
+  TTS_CHUNK_SIZE: 1024
+  DELIMITERS: [". ", "? ", "! "]
+  MINIMUM_PHRASE_LENGTH: 25  # Minimum length for a phrase before splitting
 
 TTS_MODELS:
   OPENAI_TTS:
     TTS_SPEED: 1.0  # Possible values: 0.5 (slower) to 2.0 (faster); 1.0 is standard speed
-    TTS_VOICE: "onyx"  # Possible values:  alloy, echo, fable, onyx, nova, and shimmer. 
+    TTS_VOICE: "alloy"  # Possible values: alloy, echo, fable, onyx, nova, and shimmer.
     TTS_MODEL: "tts-1"  # Possible values: model-specific, e.g., "tts-1", "tts-2"
     AUDIO_RESPONSE_FORMAT: "pcm"  # Possible values: "pcm" (default), "mp3", "wav"; audio encoding formats
+    PLAYBACK_RATE: 24000  # Sample rate for OpenAI audio playback
+
+  AZURE_TTS:
+    TTS_SPEED: 1.0  # Possible values: 0.5 (slower) to 2.0 (faster); 1.0 is standard speed
+    TTS_VOICE: "en-US-LewisMultilingualNeural"  # Replace with your desired Azure voice
+    SAMPLE_RATE: 16000  # Ensure sample rate matches playback system
+    AUDIO_FORMAT: "Raw16Khz16BitMonoPcm"  # Explicit format for Azure TTS output
+    DYNAMIC_PAUSES:  # Configurations for adjusting pauses
+      PERIOD: 0.3  # Pause duration after periods (in seconds)
+      COMMA: 0.2  # Pause duration after commas (in seconds)
+      QUESTION_MARK: 0.4  # Pause duration after question marks (in seconds)
+      EXCLAMATION_MARK: 0.5  # Pause duration after exclamations (in seconds)
+    PLAYBACK_RATE: 16000  # Sample rate for Azure audio playback
 
 LLM_MODEL_CONFIG:
   OPENAI:
@@ -40,6 +55,6 @@ LLM_MODEL_CONFIG:
       include_usage: true
 
 AUDIO_PLAYBACK_CONFIG:
-  FORMAT: 8  # Possible values: integer (e.g., 8, 16, 32); represents bits per sample, typically 8 or 16 for PCM
+  FORMAT: 16  # Possible values: integer (e.g., 8, 16, 32); represents bits per sample, typically 8 or 16 for PCM
   CHANNELS: 1  # Possible values: 1 (mono), 2 (stereo); sets audio channels
-  RATE: 24000  # Possible values: integer (e.g., 16000, 24000, 44100); sample rate in Hz
+  RATE: null  # Dynamically set at runtime based on TTS_PROVIDER

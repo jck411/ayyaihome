@@ -1,15 +1,12 @@
-
 import asyncio
 import queue
-import time
-from typing import List, Dict, Optional
 import logging
+from typing import Optional
 from openai import AsyncOpenAI
-from backend.config import Config, get_openai_client  # Absolute import
+from backend.config import Config, get_openai_client
 
 # Initialize logging
 logger = logging.getLogger(__name__)
-
 
 async def text_to_speech_processor(
     phrase_queue: asyncio.Queue,
@@ -27,17 +24,26 @@ async def text_to_speech_processor(
                 audio_queue.put(None)
                 return
 
+            # Use OpenAI TTS settings from Config
+            model = Config.OPENAI_TTS_CONFIG.get("TTS_MODEL", "tts-1")
+            voice = Config.OPENAI_TTS_CONFIG.get("TTS_VOICE", "onyx")
+            speed = Config.OPENAI_TTS_CONFIG.get("TTS_SPEED", 1.0)
+            response_format = Config.OPENAI_TTS_CONFIG.get("AUDIO_RESPONSE_FORMAT", "pcm")
+
+            logger.info(f"Using OpenAI TTS Model: {model}, Voice: {voice}, Speed: {speed}")
+
             async with openai_client.audio.speech.with_streaming_response.create(
-                model=Config.TTS_MODEL,
-                voice=Config.TTS_VOICE,
+                model=model,
+                voice=voice,
                 input=phrase,
-                speed=Config.TTS_SPEED,
-                response_format=Config.AUDIO_RESPONSE_FORMAT
+                speed=speed,
+                response_format=response_format
             ) as response:
                 async for audio_chunk in response.iter_bytes(Config.TTS_CHUNK_SIZE):
                     audio_queue.put(audio_chunk)
+
             # Add a small pause between phrases
-            audio_queue.put(b'\x00' * 2400)
+            audio_queue.put(b'\x00' * Config.TTS_CHUNK_SIZE)
     except Exception as e:
         logger.error(f"Error in TTS processing: {e}")
         audio_queue.put(None)
