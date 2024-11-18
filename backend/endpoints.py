@@ -25,7 +25,7 @@ router = APIRouter()
 # Initialize the Anthropic asynchronous client
 client = AsyncAnthropic()
 
-@router.post("/api/chat")
+@router.post("/api/anthropic")
 async def chat_with_anthropic(request: Request):
     """
     Endpoint for handling chat requests with Anthropic's API.
@@ -63,7 +63,7 @@ async def chat_with_anthropic(request: Request):
 
 
 
-@router.post("/api/chat")
+@router.post("/api/openai")
 async def openai_stream(request: Request):
     try:
         # Use the validation function

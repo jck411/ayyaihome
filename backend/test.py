@@ -1,107 +1,145 @@
-import os
-import asyncio
-from dotenv import load_dotenv
-import azure.cognitiveservices.speech as speechsdk
-from openai import AsyncOpenAI
+# backend/config.py
 
-# Load environment variables from .env file
+import os
+import yaml
+import logging
+from dotenv import load_dotenv
+from openai import AsyncOpenAI
+import azure.cognitiveservices.speech as speechsdk
+from pathlib import Path
+
+# Load environment variables from a .env file
 load_dotenv()
 
-# Fetch API keys from environment variables
-api_key = os.getenv("OPENAI_API_KEY")
-azure_key = os.getenv("AZURE_SPEECH_KEY")
-azure_region = os.getenv("AZURE_REGION")
+# Load configuration from YAML file
+CONFIG_PATH = Path(__file__).parent / "config.yaml"
 
-if not all([api_key, azure_key, azure_region]):
-    raise EnvironmentError("Missing required environment variables.")
+try:
+    with open(CONFIG_PATH, 'r') as config_file:
+        config_data = yaml.safe_load(config_file)
+except FileNotFoundError:
+    raise FileNotFoundError(f"Configuration file not found at {CONFIG_PATH}")
+except yaml.YAMLError as e:
+    raise ValueError(f"Error parsing YAML configuration: {e}")
 
-# OpenAI Client
-client = AsyncOpenAI(api_key=api_key)
+# Initialize logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# Azure TTS Configuration
-speech_config = speechsdk.SpeechConfig(subscription=azure_key, region=azure_region)
-speech_config.speech_synthesis_voice_name = "en-US-Andrew:DragonHDLatestNeural"  # Set default voice
-MINIMUM_PHRASE_LENGTH = 100  # Minimum length of a phrase before processing
-DELIMITERS = [".", "?", "!"]
-
-# Function to split streaming content into phrases
-def split_text_into_phrases(streaming_text: str, buffer: str) -> tuple[list[str], str]:
+# Configuration parameters
+class Config:
     """
-    Splits streaming text into phrases based on delimiters and minimum length.
-    Args:
-        streaming_text (str): Incoming text from the stream.
-        buffer (str): Buffer holding unprocessed text from previous iterations.
-    Returns:
-        tuple[list[str], str]: A list of complete phrases and the remaining buffer text.
+    Configuration class to hold all settings for TTS and LLM models.
     """
-    buffer += streaming_text
-    phrases = []
-    while len(buffer) >= MINIMUM_PHRASE_LENGTH:
-        for delimiter in DELIMITERS:
-            index = buffer.find(delimiter, MINIMUM_PHRASE_LENGTH)
-            if index != -1:
-                phrases.append(buffer[: index + 1].strip())
-                buffer = buffer[index + 1:].strip()
-                break
+
+    # GENERAL_TTS
+    GENERAL_TTS = config_data.get('GENERAL_TTS', {})
+    TTS_PROVIDER = GENERAL_TTS.get('TTS_PROVIDER', "azure")  # Default to Azure
+    TTS_CHUNK_SIZE = GENERAL_TTS.get('TTS_CHUNK_SIZE', 1024)
+    DELIMITERS = GENERAL_TTS.get('DELIMITERS', [". ", "? ", "! "])
+    MINIMUM_PHRASE_LENGTH = GENERAL_TTS.get('MINIMUM_PHRASE_LENGTH', 25)  # Default: 25
+
+    # TTS_MODELS
+    TTS_MODELS = config_data.get('TTS_MODELS', {})
+
+    # TTS_MODELS - OpenAI
+    OPENAI_TTS_CONFIG = TTS_MODELS.get('OPENAI_TTS', {})
+    OPENAI_TTS_SPEED = OPENAI_TTS_CONFIG.get('TTS_SPEED', 1.0)
+    OPENAI_TTS_VOICE = OPENAI_TTS_CONFIG.get('TTS_VOICE', "onyx")
+    OPENAI_TTS_MODEL = OPENAI_TTS_CONFIG.get('TTS_MODEL', "tts-1")
+    OPENAI_AUDIO_RESPONSE_FORMAT = OPENAI_TTS_CONFIG.get('AUDIO_RESPONSE_FORMAT', "pcm")
+    OPENAI_PLAYBACK_RATE = OPENAI_TTS_CONFIG.get('PLAYBACK_RATE', 24000)
+
+    # TTS_MODELS - Azure
+    AZURE_TTS_CONFIG = TTS_MODELS.get('AZURE_TTS', {})
+    AZURE_TTS_SPEED = AZURE_TTS_CONFIG.get('TTS_SPEED', 1.0)
+    AZURE_TTS_VOICE = AZURE_TTS_CONFIG.get('TTS_VOICE', "en-US-JennyNeural")
+    AZURE_SAMPLE_RATE = AZURE_TTS_CONFIG.get('SAMPLE_RATE', 16000)
+    AZURE_AUDIO_FORMAT = AZURE_TTS_CONFIG.get('AUDIO_FORMAT', "Raw16Khz16BitMonoPcm")
+    AZURE_DYNAMIC_PAUSES = AZURE_TTS_CONFIG.get('DYNAMIC_PAUSES', {
+        "PERIOD": 0.3,
+        "COMMA": 0.2,
+        "QUESTION_MARK": 0.4,
+        "EXCLAMATION_MARK": 0.5
+    })
+    AZURE_PLAYBACK_RATE = AZURE_TTS_CONFIG.get('PLAYBACK_RATE', 16000)
+
+    # LLM_MODEL_CONFIG - OpenAI
+    LLM_CONFIG = config_data.get('LLM_MODEL_CONFIG', {}).get('OPENAI', {})
+    RESPONSE_MODEL = LLM_CONFIG.get('RESPONSE_MODEL', "gpt-4o-mini")
+    TEMPERATURE = LLM_CONFIG.get('TEMPERATURE', 1.0)
+    TOP_P = LLM_CONFIG.get('TOP_P', 1.0)
+    N = LLM_CONFIG.get('N', 1)
+    SYSTEM_PROMPT_CONTENT = LLM_CONFIG.get('SYSTEM_PROMPT_CONTENT', "You are a helpful but witty and dry assistant")
+    STREAM_OPTIONS = LLM_CONFIG.get('STREAM_OPTIONS', {"include_usage": True})
+    STOP = LLM_CONFIG.get('STOP', None)
+    MAX_TOKENS = LLM_CONFIG.get('MAX_TOKENS', None)
+    PRESENCE_PENALTY = LLM_CONFIG.get('PRESENCE_PENALTY', 0.0)
+    FREQUENCY_PENALTY = LLM_CONFIG.get('FREQUENCY_PENALTY', 0.0)
+    LOGIT_BIAS = LLM_CONFIG.get('LOGIT_BIAS', None)
+    USER = LLM_CONFIG.get('USER', None)
+    TOOLS = LLM_CONFIG.get('TOOLS', None)
+    TOOL_CHOICE = LLM_CONFIG.get('TOOL_CHOICE', None)
+    MODALITIES = LLM_CONFIG.get('MODALITIES', ["text"])
+
+    # LLM_MODEL_CONFIG - Anthropic
+    ANTHROPIC_CONFIG = config_data.get('LLM_MODEL_CONFIG', {}).get('ANTHROPIC', {})
+    ANTHROPIC_RESPONSE_MODEL = ANTHROPIC_CONFIG.get('RESPONSE_MODEL', "claude-3-haiku-20240307")
+    ANTHROPIC_TEMPERATURE = ANTHROPIC_CONFIG.get('TEMPERATURE', 0.7)
+    ANTHROPIC_TOP_P = ANTHROPIC_CONFIG.get('TOP_P', 0.9)
+    ANTHROPIC_SYSTEM_PROMPT = ANTHROPIC_CONFIG.get('SYSTEM_PROMPT', "you rhyme all of your replies")
+    ANTHROPIC_MAX_TOKENS = ANTHROPIC_CONFIG.get('MAX_TOKENS', 1024)
+    ANTHROPIC_STOP_SEQUENCES = ANTHROPIC_CONFIG.get('STOP_SEQUENCES', None)
+    ANTHROPIC_STREAM_OPTIONS = ANTHROPIC_CONFIG.get('STREAM_OPTIONS', {"include_usage": True})
+
+    # AUDIO_PLAYBACK_CONFIG
+    AUDIO_PLAYBACK_CONFIG = config_data.get('AUDIO_PLAYBACK_CONFIG', {})
+    AUDIO_FORMAT = AUDIO_PLAYBACK_CONFIG.get('FORMAT', 16)
+    CHANNELS = AUDIO_PLAYBACK_CONFIG.get('CHANNELS', 1)
+    DEFAULT_RATE = AUDIO_PLAYBACK_CONFIG.get('RATE', 24000)  # Default if no provider-specific rate
+
+    # Azure Credentials from .env
+    AZURE_SUBSCRIPTION_KEY = os.getenv("AZURE_SUBSCRIPTION_KEY")
+    AZURE_REGION = os.getenv("AZURE_REGION")
+
+    # OpenAI Credentials from .env or config.yaml
+    OPENAI_API_KEY = config_data.get('OPENAI_API_KEY') or os.getenv("OPENAI_API_KEY")
+
+    @staticmethod
+    def get_playback_rate():
+        if Config.TTS_PROVIDER.lower() == "openai":
+            return Config.OPENAI_PLAYBACK_RATE
+        elif Config.TTS_PROVIDER.lower() == "azure":
+            return Config.AZURE_PLAYBACK_RATE
         else:
-            break
-    return phrases, buffer
+            raise ValueError(f"Unsupported TTS_PROVIDER: {Config.TTS_PROVIDER}")
 
-# Function to convert a single phrase to speech
-async def text_to_speech(phrase: str) -> bytes:
-    """
-    Converts a single phrase to speech audio using Azure TTS.
-    Args:
-        phrase (str): The input phrase to synthesize.
-    Returns:
-        bytes: The synthesized audio data.
-    """
-    audio_config = speechsdk.audio.AudioOutputConfig(use_default_speaker=True)
-    speech_synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=audio_config)
-    result_future = speech_synthesizer.speak_text_async(phrase)
-    result = await asyncio.to_thread(result_future.get)
+# Initialize the OpenAI API client using dependency injection
+def get_openai_client() -> AsyncOpenAI:
+    api_key = Config.OPENAI_API_KEY
+    if not api_key:
+        logger.error("OpenAI API key is not set.")
+        raise ValueError("OpenAI API key is not set.")
+    return AsyncOpenAI(api_key=api_key)
 
-    if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
-        return result.audio_data
-    elif result.reason == speechsdk.ResultReason.Canceled:
-        cancellation_details = result.cancellation_details
-        raise Exception(f"TTS canceled: {cancellation_details.reason} - {cancellation_details.error_details}")
-    else:
-        raise Exception("Unknown TTS error occurred.")
+# Initialize the Azure Speech SDK configuration
+def get_azure_speech_config() -> speechsdk.SpeechConfig:
+    subscription_key = Config.AZURE_SUBSCRIPTION_KEY
+    region = Config.AZURE_REGION
+    if not subscription_key or not region:
+        logger.error("Azure Speech credentials are not set.")
+        raise ValueError("Azure Speech credentials are not set.")
+    speech_config = speechsdk.SpeechConfig(subscription=subscription_key, region=region)
+    speech_config.speech_synthesis_voice_name = Config.AZURE_TTS_VOICE
+    speech_config.speech_synthesis_rate = Config.AZURE_TTS_SPEED
 
-# Main function to stream OpenAI responses and process them with TTS
-async def process_streamed_text_to_speech():
-    """
-    Streams text from OpenAI API and processes it into speech using Azure TTS.
-    """
-    buffer = ""  # Holds unprocessed text
-    completion = await client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": "Tell me a 100-word story about streaming."}
-        ],
-        temperature=0.5,
-        max_tokens=256,
-        stream=True
-    )
+    # Set output format
+    try:
+        speech_config.set_speech_synthesis_output_format(
+            getattr(speechsdk.SpeechSynthesisOutputFormat, Config.AZURE_AUDIO_FORMAT)
+        )
+    except AttributeError:
+        logger.error(f"Invalid OUTPUT_FORMAT: {Config.AZURE_AUDIO_FORMAT}")
+        raise
 
-    # Process chunks from OpenAI stream
-    async for chunk in completion:
-        # Extract content from the stream
-        if "content" in chunk.choices[0].delta:
-            streaming_text = chunk.choices[0].delta.content
-            # Split text into phrases
-            phrases, buffer = split_text_into_phrases(streaming_text, buffer)
-            for phrase in phrases:
-                print(f"Processing phrase: {phrase}")
-                await text_to_speech(phrase)
-
-    # Process any remaining text in the buffer
-    if buffer.strip():
-        print(f"Processing final buffer: {buffer}")
-        await text_to_speech(buffer)
-
-# Run the main function
-if __name__ == "__main__":
-    asyncio.run(process_streamed_text_to_speech())
+    return speech_config

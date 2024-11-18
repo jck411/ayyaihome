@@ -1,5 +1,5 @@
 GENERAL_TTS:
-  TTS_PROVIDER: "openai"  # Possible values: "openai", "azure"
+  TTS_PROVIDER: "azure"  # Possible values: "openai", "azure"
   TTS_CHUNK_SIZE: 1024
   DELIMITERS: [". ", "? ", "! "]
   MINIMUM_PHRASE_LENGTH: 25  # Minimum length for a phrase before splitting
@@ -13,16 +13,31 @@ TTS_MODELS:
     PLAYBACK_RATE: 24000  # Sample rate for OpenAI audio playback
 
   AZURE_TTS:
-    TTS_SPEED: 1.0  # Possible values: 0.5 (slower) to 2.0 (faster); 1.0 is standard speed
-    TTS_VOICE: "en-US-LewisMultilingualNeural"  # Replace with your desired Azure voice
+    TTS_SPEED: "0%"  # Can be percentage or numerical value; e.g., "0%", "50%", "-20%"
+    TTS_VOICE: "en-US-KaiNeural "  # en-US-KaiNeural en-US-Andrew:DragonHDLatestNeural Replace with your desired Azure voice
+    SPEECH_SYNTHESIS_RATE: "0%"  # Percentage or numerical value
+    OUTPUT_FORMAT: "Raw16Khz16BitMonoPcm"  # Explicit format for Azure TTS output
     SAMPLE_RATE: 16000  # Ensure sample rate matches playback system
-    AUDIO_FORMAT: "Raw16Khz16BitMonoPcm"  # Explicit format for Azure TTS output
-    DYNAMIC_PAUSES:  # Configurations for adjusting pauses
-      PERIOD: 0.3  # Pause duration after periods (in seconds)
-      COMMA: 0.2  # Pause duration after commas (in seconds)
-      QUESTION_MARK: 0.4  # Pause duration after question marks (in seconds)
-      EXCLAMATION_MARK: 0.5  # Pause duration after exclamations (in seconds)
     PLAYBACK_RATE: 16000  # Sample rate for Azure audio playback
+    ENABLE_PROFANITY_FILTER: false  # Optional: Enable or disable profanity filter
+    STABILITY: 0 # Optional: Controls stability of neural voices
+
+    DYNAMIC_PAUSES:
+      PERIOD: 0  # Pause duration after periods (in seconds)
+      COMMA: 0  # Pause duration after commas (in seconds)
+      QUESTION_MARK: 0  # Pause duration after question marks (in seconds)
+      EXCLAMATION_MARK: 0  # Pause duration after exclamation marks (in seconds)
+
+    DELIMITER_MAP:
+      "." : "PERIOD"
+      "," : "COMMA"
+      "?" : "QUESTION_MARK"
+      "!" : "EXCLAMATION_MARK"
+
+    PROSODY:
+      rate: "1.0"      # Adjust as needed, e.g., "1.0", "slow", "fast"
+      pitch: "0%"      # Adjust as needed, e.g., "+10%", "-5%"
+      volume: "default"  # Adjust as needed, e.g., "loud", "soft"
 
 LLM_MODEL_CONFIG:
   OPENAI:
@@ -45,13 +60,13 @@ LLM_MODEL_CONFIG:
       - text
 
   ANTHROPIC:
-    RESPONSE_MODEL: "claude-3-haiku-20240307"
+    RESPONSE_MODEL: "claude-3-5-haiku-20241022"
     TEMPERATURE: 0.7
     TOP_P: 0.9
-    SYSTEM_PROMPT: "you are a dry but witty assistant"
+    SYSTEM_PROMPT: "you are a dry and witty assistant"
     MAX_TOKENS: 1024
     STOP_SEQUENCES: null
-    STREAM_OPTIONS:
+    STREAM_OPTIONS: 
       include_usage: true
 
 AUDIO_PLAYBACK_CONFIG:
