@@ -1,5 +1,6 @@
 GENERAL_TTS:
-  TTS_PROVIDER: "azure"  # Possible values: "openai", "azure"
+  TTS_PROVIDER: "openai"  # Possible values: "openai", "azure"
+  START_TTS_AFTER_PARAGRAPH: false # Set to true for NLTK or STANZA
   TTS_CHUNK_SIZE: 1024
   DELIMITERS: [". ", "? ", "! "]  # Relevant for upstream text segmentation
   MINIMUM_PHRASE_LENGTH: 25  # Minimum length for a phrase before splitting
@@ -14,22 +15,28 @@ TTS_MODELS:
 
   AZURE_TTS:
     TTS_SPEED: "0%"  # Can be percentage or numerical value; e.g., "0%", "50%", "-20%"
-    TTS_VOICE: "en-US-KaiNeural"  # Replace with your desired Azure voice
+    TTS_VOICE: "en-US-Brian:DragonHDLatestNeural"  # Replace with your desired Azure voice
+                                  # en-US-KaiNeural
+                                  # en-US-Brian:DragonHDLatestNeural
+                                  # en-US-Andrew2:DragonHDLatestNeural
+                                  # en-US-AmberNeural (child)
+                                  # en-US-AnaNeural (child)
+
+
     SPEECH_SYNTHESIS_RATE: "0%"  # Percentage or numerical value
-    AUDIO_FORMAT: "Raw24Khz16BitMonoPcm"  # Supported Azure formats:
+    AUDIO_FORMAT: "Raw24Khz16BitMonoPcm"  # Supported Azure formats: (only pcm for pyaudio)
                                           # raw-8khz-16bit-mono-pcm  -> Raw8Khz16BitMonoPcm
                                           # raw-16khz-16bit-mono-pcm -> Raw16Khz16BitMonoPcm
                                           # raw-24khz-16bit-mono-pcm -> Raw24Khz16BitMonoPcm
                                           # raw-44100hz-16bit-mono-pcm -> Raw44100Hz16BitMonoPcm
                                           # raw-48khz-16bit-mono-pcm -> Raw48Khz16BitMonoPcm
     PLAYBACK_RATE: 24000  # Ensure this matches the playback rate of the selected AUDIO_FORMAT
-    ENABLE_PROFANITY_FILTER: false  # Optional: Enable or disable profanity filter
     STABILITY: 0  # Optional: Controls stability of neural voices
-
     PROSODY:
-      rate: "1.0"      # Adjust as needed, e.g., "1.0", "slow", "fast"
-      pitch: "0%"      # Adjust as needed, e.g., "+10%", "-5%"
+      rate: "1"      # Adjust as needed, e.g., "1.0", "slow", "fast"
+      pitch: "-5%"      # Adjust as needed, e.g., "+10%", "-5%"
       volume: "default"  # Adjust as needed, e.g., "loud", "soft"
+    TOKENIZER: "NONE"  # Options: "NLTK", "STANZA", "NONE"
 
 LLM_MODEL_CONFIG:
   OPENAI:

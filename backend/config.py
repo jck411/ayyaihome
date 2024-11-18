@@ -33,11 +33,13 @@ class Config:
     """
 
     # GENERAL_TTS
-    GENERAL_TTS = config_data.get('GENERAL_TTS', {})
-    TTS_PROVIDER = GENERAL_TTS.get('TTS_PROVIDER', "azure")  # Default to Azure
-    TTS_CHUNK_SIZE = GENERAL_TTS.get('TTS_CHUNK_SIZE', 1024)
-    DELIMITERS = GENERAL_TTS.get('DELIMITERS', [". ", "? ", "! "])
-    MINIMUM_PHRASE_LENGTH = GENERAL_TTS.get('MINIMUM_PHRASE_LENGTH', 25)  # Default: 25
+    GENERAL_TTS = config_data['GENERAL_TTS']  # Raises KeyError if 'GENERAL_TTS' is missing
+    TTS_PROVIDER = GENERAL_TTS['TTS_PROVIDER']  # Raises KeyError if 'TTS_PROVIDER' is missing
+    TTS_CHUNK_SIZE = GENERAL_TTS['TTS_CHUNK_SIZE']  # Raises KeyError if 'TTS_CHUNK_SIZE' is missing
+    DELIMITERS = GENERAL_TTS['DELIMITERS']  # Raises KeyError if 'DELIMITERS' is missing
+    MINIMUM_PHRASE_LENGTH = GENERAL_TTS['MINIMUM_PHRASE_LENGTH']  # Raises KeyError if 'MINIMUM_PHRASE_LENGTH' is missing
+    START_TTS_AFTER_PARAGRAPH = GENERAL_TTS['START_TTS_AFTER_PARAGRAPH']  # Raises KeyError if 'START_TTS_AFTER_PARAGRAPH' is missing
+
 
     # TTS_MODELS
     TTS_MODELS = config_data.get('TTS_MODELS', {})
@@ -56,6 +58,8 @@ class Config:
     AZURE_TTS_VOICE = AZURE_TTS_CONFIG['TTS_VOICE']  # Mandatory, no default
     AZURE_AUDIO_FORMAT = AZURE_TTS_CONFIG['AUDIO_FORMAT']  # Mandatory, no default
     AZURE_PLAYBACK_RATE = AZURE_TTS_CONFIG['PLAYBACK_RATE']  # Mandatory, no default
+    AZURE_TOKENIZER = AZURE_TTS_CONFIG['TOKENIZER']  # Mandatory, no default
+
 
     # LLM_MODEL_CONFIG - OpenAI
     LLM_CONFIG = config_data.get('LLM_MODEL_CONFIG', {}).get('OPENAI', {})
