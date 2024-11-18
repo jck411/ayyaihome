@@ -1,7 +1,7 @@
 GENERAL_TTS:
   TTS_PROVIDER: "azure"  # Possible values: "openai", "azure"
   TTS_CHUNK_SIZE: 1024
-  DELIMITERS: [". ", "? ", "! "]
+  DELIMITERS: [". ", "? ", "! "]  # Relevant for upstream text segmentation
   MINIMUM_PHRASE_LENGTH: 25  # Minimum length for a phrase before splitting
 
 TTS_MODELS:
@@ -14,25 +14,17 @@ TTS_MODELS:
 
   AZURE_TTS:
     TTS_SPEED: "0%"  # Can be percentage or numerical value; e.g., "0%", "50%", "-20%"
-    TTS_VOICE: "en-US-KaiNeural "  # en-US-KaiNeural en-US-Andrew:DragonHDLatestNeural Replace with your desired Azure voice
+    TTS_VOICE: "en-US-KaiNeural"  # Replace with your desired Azure voice
     SPEECH_SYNTHESIS_RATE: "0%"  # Percentage or numerical value
-    OUTPUT_FORMAT: "Raw16Khz16BitMonoPcm"  # Explicit format for Azure TTS output
-    SAMPLE_RATE: 16000  # Ensure sample rate matches playback system
-    PLAYBACK_RATE: 16000  # Sample rate for Azure audio playback
+    AUDIO_FORMAT: "Raw24Khz16BitMonoPcm"  # Supported Azure formats:
+                                          # raw-8khz-16bit-mono-pcm  -> Raw8Khz16BitMonoPcm
+                                          # raw-16khz-16bit-mono-pcm -> Raw16Khz16BitMonoPcm
+                                          # raw-24khz-16bit-mono-pcm -> Raw24Khz16BitMonoPcm
+                                          # raw-44100hz-16bit-mono-pcm -> Raw44100Hz16BitMonoPcm
+                                          # raw-48khz-16bit-mono-pcm -> Raw48Khz16BitMonoPcm
+    PLAYBACK_RATE: 24000  # Ensure this matches the playback rate of the selected AUDIO_FORMAT
     ENABLE_PROFANITY_FILTER: false  # Optional: Enable or disable profanity filter
-    STABILITY: 0 # Optional: Controls stability of neural voices
-
-    DYNAMIC_PAUSES:
-      PERIOD: 0  # Pause duration after periods (in seconds)
-      COMMA: 0  # Pause duration after commas (in seconds)
-      QUESTION_MARK: 0  # Pause duration after question marks (in seconds)
-      EXCLAMATION_MARK: 0  # Pause duration after exclamation marks (in seconds)
-
-    DELIMITER_MAP:
-      "." : "PERIOD"
-      "," : "COMMA"
-      "?" : "QUESTION_MARK"
-      "!" : "EXCLAMATION_MARK"
+    STABILITY: 0  # Optional: Controls stability of neural voices
 
     PROSODY:
       rate: "1.0"      # Adjust as needed, e.g., "1.0", "slow", "fast"
@@ -66,7 +58,7 @@ LLM_MODEL_CONFIG:
     SYSTEM_PROMPT: "you are a dry and witty assistant"
     MAX_TOKENS: 1024
     STOP_SEQUENCES: null
-    STREAM_OPTIONS: 
+    STREAM_OPTIONS:
       include_usage: true
 
 AUDIO_PLAYBACK_CONFIG:

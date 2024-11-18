@@ -1,27 +1,12 @@
 import asyncio
 import queue
 import logging
-import re
-from typing import Optional
 import azure.cognitiveservices.speech as speechsdk
 from backend.config import Config, get_azure_speech_config
 
 # Initialize logging
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
-
-
-def get_config_value(config: dict, key: str, parent_key: str = ""):
-    """
-    Fetches a configuration value and ensures it exists.
-    Raises a KeyError with a descriptive error message if the key is missing.
-    """
-    if key not in config:
-        full_key = f"{parent_key}.{key}" if parent_key else key
-        logger.error(f"Configuration key missing: {full_key}")
-        raise KeyError(f"Missing required configuration: '{full_key}'. Please set it in the config.")
-    return config[key]
-
 
 class PushAudioOutputStreamCallback(speechsdk.audio.PushAudioOutputStreamCallback):
     """
@@ -48,50 +33,28 @@ class PushAudioOutputStreamCallback(speechsdk.audio.PushAudioOutputStreamCallbac
         self.audio_queue.put(None)
         logger.info("Audio stream closed.")
 
-
 def create_ssml(phrase: str) -> str:
     """
     Wraps the phrase in SSML to adjust prosody (rate, pitch, volume) as per configuration.
-    Inserts <break> tags based on DYNAMIC_PAUSES settings.
     """
     azure_config = Config.TTS_MODELS['AZURE_TTS']
-    prosody = get_config_value(azure_config, 'PROSODY', 'TTS_MODELS.AZURE_TTS')
-    rate = get_config_value(prosody, 'rate', 'TTS_MODELS.AZURE_TTS.PROSODY')
-    pitch = get_config_value(prosody, 'pitch', 'TTS_MODELS.AZURE_TTS.PROSODY')
-    volume = get_config_value(prosody, 'volume', 'TTS_MODELS.AZURE_TTS.PROSODY')
-    voice_name = get_config_value(azure_config, 'TTS_VOICE', 'TTS_MODELS.AZURE_TTS')
-    dynamic_pauses = get_config_value(azure_config, 'DYNAMIC_PAUSES', 'TTS_MODELS.AZURE_TTS')
-    delimiter_map = get_config_value(azure_config, 'DELIMITER_MAP', 'TTS_MODELS.AZURE_TTS')
-
-    # Build a regex pattern from the delimiters
-    delimiters_pattern = '[' + re.escape(''.join(delimiter_map.keys())) + ']'
-
-    # Function to replace delimiters with themselves and a break tag if needed
-    def replace_delimiter(match):
-        delimiter = match.group(0)
-        config_key = delimiter_map[delimiter]
-        duration = get_config_value(dynamic_pauses, config_key, 'TTS_MODELS.AZURE_TTS.DYNAMIC_PAUSES')
-        duration_ms = int(duration * 1000)  # Convert seconds to milliseconds
-        if duration_ms > 0:
-            return f"{delimiter}<break time='{duration_ms}ms'/>"
-        else:
-            return delimiter  # No break tag if duration is zero
-
-    # Apply the replacement to the phrase
-    phrase_with_breaks = re.sub(delimiters_pattern, replace_delimiter, phrase)
+    prosody = azure_config['PROSODY']
+    rate = prosody['rate']
+    pitch = prosody['pitch']
+    volume = prosody['volume']
+    voice_name = azure_config['TTS_VOICE']
 
     ssml = f"""
 <speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='en-US'>
     <voice name='{voice_name}'>
         <prosody rate='{rate}' pitch='{pitch}' volume='{volume}'>
-            {phrase_with_breaks}
+            {phrase}
         </prosody>
     </voice>
 </speak>
 """
     logger.debug(f"Generated SSML: {ssml}")
     return ssml
-
 
 async def azure_text_to_speech_processor(
     phrase_queue: asyncio.Queue,
@@ -113,12 +76,17 @@ async def azure_text_to_speech_processor(
                 # Initialize Speech Config
                 speech_config = get_azure_speech_config()
 
-                # Optional: Enable profanity filter (implement if needed)
-                if Config.TTS_MODELS['AZURE_TTS'].get('ENABLE_PROFANITY_FILTER', False):
-                    logger.warning("Profanity filter is enabled but not implemented.")
-                    # Implement profanity filtering here if required
+                # Retrieve and set the audio format from configuration
+                azure_config = Config.TTS_MODELS['AZURE_TTS']
+                audio_format_str = azure_config.get('AUDIO_FORMAT', 'Audio16Khz32KBitRateMonoMp3')
+                try:
+                    audio_format = getattr(speechsdk.SpeechSynthesisOutputFormat, audio_format_str)
+                    speech_config.set_speech_synthesis_output_format(audio_format)
+                    logger.info(f"Set audio format to: {audio_format_str}")
+                except AttributeError:
+                    logger.error(f"Invalid audio format: {audio_format_str}. Using default format.")
 
-                # Create SSML with prosody adjustments and dynamic pauses
+                # Create SSML with prosody adjustments
                 ssml_phrase = create_ssml(phrase)
 
                 # Set up push audio output stream with the callback
@@ -140,8 +108,6 @@ async def azure_text_to_speech_processor(
                     logger.error("Unknown TTS error occurred.")
             except Exception as e:
                 logger.error(f"Error processing phrase '{phrase}': {e}")
-
-            # No silent chunk addition here; pauses are handled via SSML
     except Exception as e:
         logger.error(f"Error in TTS processing: {e}")
         audio_queue.put(None)
