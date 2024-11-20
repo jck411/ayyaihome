@@ -99,3 +99,8 @@ Ensure that backend and any subdirectories in your project have an __init__.py f
 4. Check for Circular Imports
 If there are any circular imports (modules importing each other), Python might throw errors. Make sure backend/routes.py does not have an import cycle with other files.
 After trying these steps, re-run your code and see if the issue is resolved.
+
+
+
+
+Uses Azure Cognitive Services for text-to-speech tasks and utilizes the `speechsdk.SpeechSynthesizer` to stream audio directly to the default speaker without an additional player.???

@@ -1,36 +1,15 @@
+# backend/TTS/azure_tts.py
+
 import asyncio
 import queue
 import logging
 import azure.cognitiveservices.speech as speechsdk
 from backend.config import Config, get_azure_speech_config
-import stanza
-import nltk
+from backend.text_generation.phrase_preparation.SSML_addition import create_ssml
+from backend.text_generation.phrase_preparation.text_splitting import process_text
+from backend.text_generation.phrase_preparation.text_tokenization import tokenize_and_queue
 
-# Initialize logging
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
-
-
-# Function to initialize tokenizers based on configuration
-def initialize_tokenizers():
-    """
-    Initializes NLTK and Stanza resources based on the configuration.
-    """
-    tokenizer = Config.TTS_MODELS['AZURE_TTS']['TOKENIZER']  # Mandatory configuration
-    if tokenizer == "NLTK":
-        nltk.download('punkt', quiet=True)
-    elif tokenizer == "STANZA":
-        stanza.download('en')
-        return stanza.Pipeline(lang='en', processors='tokenize')
-    elif tokenizer == "NONE":
-        return None
-    else:
-        raise ValueError(f"Unsupported tokenizer: {tokenizer}")
-
-
-# Initialize the appropriate tokenizer (STANZA or NONE)
-nlp_stanza = initialize_tokenizers()
-
 
 class PushAudioOutputStreamCallback(speechsdk.audio.PushAudioOutputStreamCallback):
     """
@@ -55,124 +34,116 @@ class PushAudioOutputStreamCallback(speechsdk.audio.PushAudioOutputStreamCallbac
         Called when the audio stream is closed.
         """
         self.audio_queue.put(None)
+        logger.info("Audio stream closed.")
 
-
-def create_ssml(phrase: str) -> str:
+async def azure_text_to_speech_processor(phrase_queue: asyncio.Queue, audio_queue: queue.Queue):
     """
-    Wraps the phrase in SSML to adjust prosody (rate, pitch, volume) as per configuration.
+    Processes phrases from 'phrase_queue' and converts them to speech using Azure TTS.
+
+    Args:
+        phrase_queue (asyncio.Queue): Queue containing phrases to process.
+        audio_queue (queue.Queue): Queue to send audio data.
     """
-    azure_config = Config.TTS_MODELS['AZURE_TTS']
-    prosody = azure_config['PROSODY']
-    rate = prosody['rate']
-    pitch = prosody['pitch']
-    volume = prosody['volume']
-    voice_name = azure_config['TTS_VOICE']
-
-    ssml = f"""
-<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='en-US'>
-    <voice name='{voice_name}'>
-        <prosody rate='{rate}' pitch='{pitch}' volume='{volume}'>
-            {phrase}
-        </prosody>
-    </voice>
-</speak>
-"""
-    return ssml
-
-
-def tokenize_text(text: str, tokenizer: str):
-    """
-    Tokenizes input text using the specified tokenizer (NLTK, STANZA, or NONE).
-    """
-    if tokenizer == "NLTK":
-        return nltk.tokenize.sent_tokenize(text)
-    elif tokenizer == "STANZA":
-        doc = nlp_stanza(text)
-        return [sentence.text for sentence in doc.sentences]
-    elif tokenizer == "NONE":
-        return [text]  # Treat the entire input as a single phrase
-    else:
-        raise ValueError(f"Unsupported tokenizer: {tokenizer}")
-
-
-async def azure_text_to_speech_processor(
-    phrase_queue: asyncio.Queue,
-    audio_queue: queue.Queue,
-    start_tts_after_paragraph: bool = False,
-):
-    """
-    Converts phrases from the phrase queue into speech using Azure TTS and sends audio to the audio queue.
-    If start_tts_after_paragraph is True, waits for paragraph completion before processing.
-    """
-    buffer = []  # Buffer to store accumulated phrases when waiting for paragraph completion
-    tokenizer = Config.TTS_MODELS['AZURE_TTS']['TOKENIZER']  # NLTK, STANZA, or NONE
-
     try:
-        while True:
-            phrase = await phrase_queue.get()
-            if phrase is None:
-                # Process the final buffer if paragraph completion is enabled
-                if start_tts_after_paragraph and buffer:
-                    combined_text = " ".join(buffer)
-                    tokenized_phrases = tokenize_text(combined_text, tokenizer)
-                    for phrase in tokenized_phrases:
-                        await process_tts(phrase, audio_queue)
-                    buffer = []
+        # Load Azure speech configuration and playback rate
+        speech_config, playback_rate = get_azure_speech_config()
 
-                # Signal that processing is complete
-                audio_queue.put(None)
+        # Load general configuration
+        general_tts_config = Config.GENERAL_TTS
+        azure_config = Config.TTS_MODELS.get("AZURE_TTS", {})
+
+        use_ssml_module = general_tts_config.get("USE_SSML_MODULE", False)
+        use_azure_ssml = azure_config.get("USE_AZURE_SSML", False)
+        use_tokenizer = general_tts_config.get("USE_TOKENIZER", False)
+        use_text_splitting = general_tts_config.get("USE_TEXT_SPLITTING", False)
+        tokenizer = general_tts_config.get("TOKENIZER", None)
+
+        while True:
+            raw_text = await phrase_queue.get()
+            if raw_text is None:
+                audio_queue.put(None)  # Signal end of processing
+                logger.info("TTS processing complete.")
                 return
 
-            if start_tts_after_paragraph:
-                # Accumulate text in the buffer until a paragraph is complete
-                buffer.append(phrase)
-                if phrase.endswith("\n") or not phrase_queue.empty():
-                    continue  # Wait for more input if the paragraph isn't finished
-                combined_text = " ".join(buffer)
-                tokenized_phrases = tokenize_text(combined_text, tokenizer)
-                for phrase in tokenized_phrases:
-                    await process_tts(phrase, audio_queue)
-                buffer = []  # Clear buffer after processing
+            # Initialize a local queue for phrase processing
+            local_phrase_queue = asyncio.Queue()
+
+            # Step 1: Perform text splitting if enabled
+            if use_text_splitting:
+                await process_text(raw_text, local_phrase_queue, general_tts_config)
             else:
-                # Process each phrase immediately
-                tokenized_phrases = tokenize_text(phrase, tokenizer)
-                for phrase in tokenized_phrases:
-                    await process_tts(phrase, audio_queue)
+                await local_phrase_queue.put(raw_text)
+                await local_phrase_queue.put(None)  # Signal end of queue
+
+            # Step 2: Perform tokenization if enabled
+            if use_tokenizer and tokenizer and tokenizer.lower() != "none":
+                tokenized_queue = asyncio.Queue()
+                while True:
+                    phrase = await local_phrase_queue.get()
+                    if phrase is None:
+                        await tokenized_queue.put(None)
+                        break
+                    await tokenize_and_queue(phrase, tokenized_queue, tokenizer)
+                local_phrase_queue = tokenized_queue
+            else:
+                # If tokenization is not used, continue with local_phrase_queue
+                tokenized_queue = local_phrase_queue
+
+            # Step 3: Convert each phrase to speech
+            while True:
+                phrase = await tokenized_queue.get()
+                if phrase is None:
+                    break  # Move to the next raw_text from phrase_queue
+
+                try:
+                    # Prepare SSML or plain text
+                    if use_ssml_module:
+                        voice_name = azure_config.get("TTS_VOICE", "en-US-Brian:DragonHDLatestNeural")
+                        prosody = azure_config.get("PROSODY", {})
+                        rate = prosody.get("rate", "0%")
+                        pitch = prosody.get("pitch", "0%")
+                        volume = prosody.get("volume", "default")
+                        stability = azure_config.get("STABILITY", 1.0)
+
+                        ssml_phrase = create_ssml(
+                            phrase=phrase,
+                            voice_name=voice_name,
+                            rate=rate,
+                            pitch=pitch,
+                            volume=volume,
+                            stability=stability,
+                        )
+                        use_ssml = True
+                    elif use_azure_ssml:
+                        ssml_phrase = f"<speak>{phrase}</speak>"
+                        use_ssml = True
+                    else:
+                        ssml_phrase = phrase
+                        use_ssml = False
+
+                    # Set up push audio output stream with the callback
+                    push_stream_callback = PushAudioOutputStreamCallback(audio_queue)
+                    push_stream = speechsdk.audio.PushAudioOutputStream(push_stream_callback)
+                    audio_config = speechsdk.audio.AudioOutputConfig(stream=push_stream)
+                    synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=audio_config)
+
+                    # Synthesize speech
+                    logger.info(f"Processing phrase: {phrase}")
+                    
+                    if use_ssml:
+                        result = synthesizer.speak_ssml_async(ssml_phrase).get()
+                    else:
+                        result = synthesizer.speak_text_async(ssml_phrase).get()
+
+                    if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
+                        logger.info("TTS synthesis completed successfully.")
+                    elif result.reason == speechsdk.ResultReason.Canceled:
+                        details = result.cancellation_details
+                        logger.error(f"TTS canceled: {details.reason} - {details.error_details}")
+                    else:
+                        logger.error("Unknown TTS error occurred.")
+                except Exception as e:
+                    logger.error(f"Error processing phrase '{phrase}': {e}")
     except Exception as e:
         logger.error(f"Error in TTS processing: {e}")
         audio_queue.put(None)
-
-
-async def process_tts(phrase: str, audio_queue: queue.Queue):
-    """
-    Sends text to Azure TTS for synthesis and streams the audio to the queue.
-    """
-    try:
-        # Initialize Speech Config
-        speech_config = get_azure_speech_config()
-
-        # Retrieve and set the audio format from configuration
-        azure_config = Config.TTS_MODELS['AZURE_TTS']
-        audio_format_str = azure_config['AUDIO_FORMAT']
-        try:
-            audio_format = getattr(speechsdk.SpeechSynthesisOutputFormat, audio_format_str)
-            speech_config.set_speech_synthesis_output_format(audio_format)
-        except AttributeError:
-            raise ValueError(f"Invalid audio format: {audio_format_str}")
-
-        # Create SSML with prosody adjustments
-        ssml_phrase = create_ssml(phrase)
-
-        # Set up push audio output stream with the callback
-        push_stream_callback = PushAudioOutputStreamCallback(audio_queue)
-        push_stream = speechsdk.audio.PushAudioOutputStream(push_stream_callback)
-        audio_config = speechsdk.audio.AudioOutputConfig(stream=push_stream)
-        synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=audio_config)
-
-        # Synthesize speech using SSML
-        result = synthesizer.speak_ssml_async(ssml_phrase).get()
-
-        if result.reason != speechsdk.ResultReason.SynthesizingAudioCompleted:
-            raise RuntimeError(f"Failed to synthesize audio. Reason: {result.reason}")
-    except Exception as e:
-        logger.error(f"Error processing phrase '{phrase}': {e}")

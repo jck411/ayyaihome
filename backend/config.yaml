@@ -1,11 +1,33 @@
 GENERAL_TTS:
-  TTS_PROVIDER: "openai"  # Possible values: "openai", "azure"
-  START_TTS_AFTER_PARAGRAPH: false # Set to true for NLTK or STANZA
-  TTS_CHUNK_SIZE: 1024
-  DELIMITERS: [". ", "? ", "! "]  # Relevant for upstream text segmentation
-  MINIMUM_PHRASE_LENGTH: 25  # Minimum length for a phrase before splitting
+
+  USE_SSML_MODULE: false               # Boolean to enable or disable SSML
+  TTS_PROVIDER: "azure"               # The TTS provider (e.g., "azure", "openai")
+  USE_TEXT_SPLITTING: true                # Enables or disables text splitting
+  DELIMITERS:                    # Unified list of all delimiters
+    ". ": {enabled: true, pause_time: 250}    # Period with 250ms pause
+    "! ": {enabled: true, pause_time: 250}    # Exclamation mark
+    "? ": {enabled: true, pause_time: 5000}    # Question mark
+    "\n": {enabled: true, pause_time: 500}    # Single line break for paragraph
+    "\n\n": {enabled: true, pause_time: 750}  # Double line break for larger paragraph breaks
+    "\"": {enabled: true, pause_time: 100}    # Quotes
+    "---": {enabled: true, pause_time: 500}   # Long dash
+    "***": {enabled: true, pause_time: 700}   # Asterisks (commonly used as section breaks)
+    "**": {enabled: true, pause_time: 700}   # Asterisks (commonly used as section breaks)
+    "*": {enabled: true, pause_time: 750}   # Asterisks (commonly used as section breaks)
+    "--": {enabled: true, pause_time: 300}    # Double dash
+    ", ": {enabled: true, pause_time: 100}    # Comma with slight pause
+    "; ": {enabled: true, pause_time: 150}    # Semicolon with a bit more pause
+    ": ": {enabled: true, pause_time: 150}    # Colon with a slight pause
+
+  TOKENIZER: "None"                  # Options: "nltk", "stanza", or None
+
+  STANZA_CONFIG:                     # Stanza-specific settings (only relevant if TOKENIZER="stanza")
+    language: "en"                   # Language code for Stanza (e.g., "en" for English)
+    processors: "tokenize"           # Stanza processors to load
+    use_gpu: false                   # Whether to enable GPU processing
 
 TTS_MODELS:
+
   OPENAI_TTS:
     TTS_SPEED: 1.0  # Possible values: 0.5 (slower) to 2.0 (faster); 1.0 is standard speed
     TTS_VOICE: "alloy"  # Possible values: alloy, echo, fable, onyx, nova, and shimmer.
@@ -14,29 +36,30 @@ TTS_MODELS:
     PLAYBACK_RATE: 24000  # Sample rate for OpenAI audio playback
 
   AZURE_TTS:
-    TTS_SPEED: "0%"  # Can be percentage or numerical value; e.g., "0%", "50%", "-20%"
     TTS_VOICE: "en-US-Brian:DragonHDLatestNeural"  # Replace with your desired Azure voice
-                                  # en-US-KaiNeural
-                                  # en-US-Brian:DragonHDLatestNeural
-                                  # en-US-Andrew2:DragonHDLatestNeural
-                                  # en-US-AmberNeural (child)
-                                  # en-US-AnaNeural (child)
+                                          # en-US-KaiNeural
+                                          # en-US-Brian:DragonHDLatestNeural
+                                          # en-US-Andrew2:DragonHDLatestNeural
+                                          # en-US-AmberNeural (child)
+                                          # en-US-AnaNeural (child)
 
-
-    SPEECH_SYNTHESIS_RATE: "0%"  # Percentage or numerical value
-    AUDIO_FORMAT: "Raw24Khz16BitMonoPcm"  # Supported Azure formats: (only pcm for pyaudio)
+    AUDIO_FORMAT: "Raw24Khz16BitMonoPcm"  # Supported Azure formats:
                                           # raw-8khz-16bit-mono-pcm  -> Raw8Khz16BitMonoPcm
                                           # raw-16khz-16bit-mono-pcm -> Raw16Khz16BitMonoPcm
                                           # raw-24khz-16bit-mono-pcm -> Raw24Khz16BitMonoPcm
                                           # raw-44100hz-16bit-mono-pcm -> Raw44100Hz16BitMonoPcm
                                           # raw-48khz-16bit-mono-pcm -> Raw48Khz16BitMonoPcm
     PLAYBACK_RATE: 24000  # Ensure this matches the playback rate of the selected AUDIO_FORMAT
-    STABILITY: 0  # Optional: Controls stability of neural voices
+
+    SPEECH_SYNTHESIS_RATE: "0%"            # Adjusts speed of speech; default is "0%"
+    STABILITY: 1.0                         # Stability of the neural voice (range: 0.0 to 1.0)
+    USE_AZURE_SSML: false                  # If true, Azure interprets SSML tags.
+
+    # Prosody settings (applied gloon all the text if SSML is enabled)
     PROSODY:
-      rate: "1"      # Adjust as needed, e.g., "1.0", "slow", "fast"
-      pitch: "-5%"      # Adjust as needed, e.g., "+10%", "-5%"
-      volume: "default"  # Adjust as needed, e.g., "loud", "soft"
-    TOKENIZER: "NONE"  # Options: "NLTK", "STANZA", "NONE"
+      rate: "0%"                           # Speaking rate adjustment; default "0%"
+      pitch: "0%"                          # Pitch adjustment; default "0%"
+      volume: "default"                    # Volume adjustment (e.g., "loud", "soft", "default")
 
 LLM_MODEL_CONFIG:
   OPENAI:

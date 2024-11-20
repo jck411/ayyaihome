@@ -1,25 +1,16 @@
+# backend/TTS/openai_tts.py
+
 import asyncio
 import queue
 import logging
 from typing import Optional
-from openai import AsyncOpenAI
+
 from backend.config import Config, get_openai_client
+from openai import AsyncOpenAI
 
-# Initialize logging
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
 
-def get_config_value(config: dict, key: str, parent_key: str = ""):
-    """
-    Fetches a configuration value and ensures it exists.
-    Raises a KeyError with a descriptive error message if the key is missing.
-    """
-    if key not in config:
-        full_key = f"{parent_key}.{key}" if parent_key else key
-        raise KeyError(f"Missing required configuration: '{full_key}'. Please set it in the config.")
-    return config[key]
-
-async def text_to_speech_processor(
+async def openai_text_to_speech_processor(
     phrase_queue: asyncio.Queue,
     audio_queue: queue.Queue,
     openai_client: Optional[AsyncOpenAI] = None,
@@ -27,16 +18,22 @@ async def text_to_speech_processor(
 ):
     """
     Processes phrases into speech using the OpenAI TTS model.
+
+    Args:
+        phrase_queue (asyncio.Queue): Queue containing phrases to process.
+        audio_queue (queue.Queue): Queue to send audio data.
+        openai_client (Optional[AsyncOpenAI]): OpenAI client instance.
+        start_tts_after_paragraph (bool): Whether to start TTS after a paragraph.
     """
     openai_client = openai_client or get_openai_client()
 
     # Load and validate OpenAI TTS configurations
-    openai_config = Config.OPENAI_TTS_CONFIG
-    model = get_config_value(openai_config, "TTS_MODEL", "OPENAI_TTS_CONFIG")
-    voice = get_config_value(openai_config, "TTS_VOICE", "OPENAI_TTS_CONFIG")
-    speed = get_config_value(openai_config, "TTS_SPEED", "OPENAI_TTS_CONFIG")
-    response_format = get_config_value(openai_config, "AUDIO_RESPONSE_FORMAT", "OPENAI_TTS_CONFIG")
-    chunk_size = Config.TTS_CHUNK_SIZE  # Fetch from GENERAL_TTS instead of OPENAI_TTS_CONFIG
+    openai_config = Config.OPENAI_TTS
+    model = openai_config.get("TTS_MODEL", "tts-1")
+    voice = openai_config.get("TTS_VOICE", "onyx")
+    speed = openai_config.get("TTS_SPEED", 1.0)
+    response_format = openai_config.get("AUDIO_RESPONSE_FORMAT", "pcm")
+    chunk_size = Config.AUDIO_FORMAT  # Assuming AUDIO_FORMAT corresponds to chunk_size
 
     buffer = []  # Buffer to accumulate text for paragraph handling
 
@@ -69,10 +66,19 @@ async def text_to_speech_processor(
         logger.error(f"Error in TTS processing: {e}")
         audio_queue.put(None)
 
-
 async def process_openai_tts(phrase, audio_queue, openai_client, model, voice, speed, response_format, chunk_size):
     """
     Handles the actual processing of a single phrase with OpenAI TTS.
+
+    Args:
+        phrase (str): The phrase to convert to speech.
+        audio_queue (queue.Queue): Queue to send audio data.
+        openai_client (AsyncOpenAI): OpenAI client instance.
+        model (str): OpenAI TTS model to use.
+        voice (str): Voice to use for TTS.
+        speed (float): Speed of speech.
+        response_format (str): Audio response format.
+        chunk_size (int): Size of audio chunks.
     """
     try:
         logger.info(f"Processing phrase with OpenAI TTS: {phrase}")
