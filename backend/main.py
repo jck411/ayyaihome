@@ -2,7 +2,6 @@
 
 import os
 import yaml
-import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import pyaudio
@@ -13,10 +12,6 @@ from backend.config import get_openai_client  # Import configuration utilities
 
 # Load environment variables from a .env file
 load_dotenv()
-
-# Initialize logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 # Load configuration from YAML file
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.yaml")

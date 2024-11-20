@@ -1,12 +1,7 @@
 import asyncio
 import queue
-import logging
 import azure.cognitiveservices.speech as speechsdk
 from backend.config import Config, get_azure_speech_config
-
-# Initialize logging
-logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
 
 class PushAudioOutputStreamCallback(speechsdk.audio.PushAudioOutputStreamCallback):
     """
@@ -31,7 +26,6 @@ class PushAudioOutputStreamCallback(speechsdk.audio.PushAudioOutputStreamCallbac
         Called when the audio stream is closed.
         """
         self.audio_queue.put(None)
-        logger.info("Audio stream closed.")
 
 def create_ssml(phrase: str) -> str:
     """
@@ -53,23 +47,17 @@ def create_ssml(phrase: str) -> str:
     </voice>
 </speak>
 """
-    logger.debug(f"Generated SSML: {ssml}")
     return ssml
 
 async def azure_text_to_speech_processor(
     phrase_queue: asyncio.Queue,
     audio_queue: queue.Queue,
 ):
-    """
-    Converts phrases from the phrase queue into speech using Azure TTS and sends audio to the audio queue.
-    """
     try:
         while True:
             phrase = await phrase_queue.get()
             if phrase is None:
-                # Signal that processing is complete
                 audio_queue.put(None)
-                logger.info("TTS processing complete.")
                 return
 
             try:
@@ -79,12 +67,8 @@ async def azure_text_to_speech_processor(
                 # Retrieve and set the audio format from configuration
                 azure_config = Config.TTS_MODELS['AZURE_TTS']
                 audio_format_str = azure_config.get('AUDIO_FORMAT', 'Audio16Khz32KBitRateMonoMp3')
-                try:
-                    audio_format = getattr(speechsdk.SpeechSynthesisOutputFormat, audio_format_str)
-                    speech_config.set_speech_synthesis_output_format(audio_format)
-                    logger.info(f"Set audio format to: {audio_format_str}")
-                except AttributeError:
-                    logger.error(f"Invalid audio format: {audio_format_str}. Using default format.")
+                audio_format = getattr(speechsdk.SpeechSynthesisOutputFormat, audio_format_str)
+                speech_config.set_speech_synthesis_output_format(audio_format)
 
                 # Create SSML with prosody adjustments
                 ssml_phrase = create_ssml(phrase)
@@ -95,19 +79,13 @@ async def azure_text_to_speech_processor(
                 audio_config = speechsdk.audio.AudioOutputConfig(stream=push_stream)
                 synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=audio_config)
 
-                # Synthesize speech using SSML
-                logger.info(f"Processing phrase: {phrase}")
-                result = synthesizer.speak_ssml_async(ssml_phrase).get()
+                # Synthesize speech using SSML without blocking
+                result_future = synthesizer.speak_ssml_async(ssml_phrase)
+                # Do not call .get() here; allow the callback to handle audio data
 
-                if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
-                    logger.info("TTS synthesis completed successfully.")
-                elif result.reason == speechsdk.ResultReason.Canceled:
-                    details = result.cancellation_details
-                    logger.error(f"TTS canceled: {details.reason} - {details.error_details}")
-                else:
-                    logger.error("Unknown TTS error occurred.")
-            except Exception as e:
-                logger.error(f"Error processing phrase '{phrase}': {e}")
-    except Exception as e:
-        logger.error(f"Error in TTS processing: {e}")
+                # Optionally, you can await the result if needed
+                await asyncio.get_event_loop().run_in_executor(None, result_future.get)
+            except Exception:
+                pass
+    except Exception:
         audio_queue.put(None)

@@ -1,11 +1,11 @@
 GENERAL_TTS:
   TTS_PROVIDER: "azure"  # Possible values: "openai", "azure"
-  TTS_CHUNK_SIZE: 1024
   DELIMITERS: [". ", "? ", "! "]  # Relevant for upstream text segmentation
   MINIMUM_PHRASE_LENGTH: 25  # Minimum length for a phrase before splitting
 
 TTS_MODELS:
   OPENAI_TTS:
+    TTS_CHUNK_SIZE: 1024
     TTS_SPEED: 1.0  # Possible values: 0.5 (slower) to 2.0 (faster); 1.0 is standard speed
     TTS_VOICE: "alloy"  # Possible values: alloy, echo, fable, onyx, nova, and shimmer.
     TTS_MODEL: "tts-1"  # Possible values: model-specific, e.g., "tts-1", "tts-2"

@@ -1,13 +1,8 @@
 import asyncio
 import queue
-import logging
 from typing import Optional
 from openai import AsyncOpenAI
 from backend.config import Config, get_openai_client
-
-# Initialize logging
-logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
 
 def get_config_value(config: dict, key: str, parent_key: str = ""):
     """
@@ -43,11 +38,9 @@ async def text_to_speech_processor(
             if phrase is None:
                 # Signal the end of processing
                 audio_queue.put(None)
-                logger.info("TTS processing complete.")
                 return
 
             try:
-                logger.info(f"Processing phrase with OpenAI TTS: {phrase}")
                 async with openai_client.audio.speech.with_streaming_response.create(
                     model=model,
                     voice=voice,
@@ -60,9 +53,7 @@ async def text_to_speech_processor(
                 
                 # Add a small pause between phrases
                 audio_queue.put(b'\x00' * chunk_size)
-                logger.info(f"Added pause after phrase: {phrase}")
             except Exception as e:
-                logger.error(f"Error processing phrase '{phrase}': {e}")
+                audio_queue.put(None)
     except Exception as e:
-        logger.error(f"Error in TTS processing: {e}")
         audio_queue.put(None)

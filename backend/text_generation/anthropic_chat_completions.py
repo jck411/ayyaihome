@@ -1,29 +1,21 @@
 import asyncio
-import logging
-import time
 from anthropic import AsyncAnthropic
-from fastapi import HTTPException, logger
+from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
 from backend.config import Config  # Import the Config class directly
 
-
-# Initialize logging
-logger = logging.getLogger(__name__)
-
 client = AsyncAnthropic()
 
-async def stream_anthropic_completion(messages: list, phrase_queue: asyncio.Queue, request_timestamp: float):
+async def stream_anthropic_completion(messages: list, phrase_queue: asyncio.Queue):
     """
     Streams responses from the Anthropic API and handles phrase segmentation.
 
     Args:
         messages (list): The list of message dicts with 'role' and 'content' keys.
         phrase_queue (asyncio.Queue): The queue to hold phrases for processing.
-        request_timestamp (float): The timestamp when the request was received.
     """
     try:
         working_string = ""
-        first_text_timestamp = None
 
         async with client.messages.stream(
             max_tokens=Config.ANTHROPIC_MAX_TOKENS,
@@ -38,11 +30,6 @@ async def stream_anthropic_completion(messages: list, phrase_queue: asyncio.Queu
                 content = text_chunk or ""
 
                 if content:
-                    if first_text_timestamp is None:
-                        first_text_timestamp = time.time()
-                        elapsed_time = first_text_timestamp - request_timestamp
-                        logger.info(f"Time to first text generation: {elapsed_time:.2f} seconds")
-
                     yield content
                     working_string += content
                     while len(working_string) >= Config.MINIMUM_PHRASE_LENGTH:
@@ -58,6 +45,6 @@ async def stream_anthropic_completion(messages: list, phrase_queue: asyncio.Queu
             await phrase_queue.put(working_string.strip())
         await phrase_queue.put(None)
 
-    except Exception as e:
+    except Exception:
         await phrase_queue.put(None)
-        raise HTTPException(status_code=500, detail=f"Error calling Anthropic API: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error calling Anthropic API.")
