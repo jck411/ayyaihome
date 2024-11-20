@@ -65,3 +65,7 @@ AUDIO_PLAYBACK_CONFIG:
   FORMAT: 16  # Possible values: integer (e.g., 8, 16, 32); represents bits per sample, typically 8 or 16 for PCM
   CHANNELS: 1  # Possible values: 1 (mono), 2 (stereo); sets audio channels
   RATE: null  # Dynamically set at runtime based on TTS_PROVIDER
+
+LOGGING:
+  ENABLED: true  # Set to false to disable logging
+  LEVEL: "INFO"  # Possible values: "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"
