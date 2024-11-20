@@ -1,19 +1,25 @@
 import asyncio
 from anthropic import AsyncAnthropic
 from fastapi import HTTPException
-from fastapi.responses import StreamingResponse
-from backend.config import Config  # Import the Config class directly
+from backend.config import Config, get_anthropic_client  # Import both Config and the client factory
 
-client = AsyncAnthropic()
 
-async def stream_anthropic_completion(messages: list, phrase_queue: asyncio.Queue):
+async def stream_anthropic_completion(
+    messages: list, 
+    phrase_queue: asyncio.Queue, 
+    client: AsyncAnthropic = None
+):
     """
     Streams responses from the Anthropic API and handles phrase segmentation.
 
     Args:
         messages (list): The list of message dicts with 'role' and 'content' keys.
         phrase_queue (asyncio.Queue): The queue to hold phrases for processing.
+        client (AsyncAnthropic): Optional Anthropic client instance. Defaults to a client created via get_anthropic_client().
     """
+    # Use provided client or initialize default
+    client = client or get_anthropic_client()
+    
     try:
         working_string = ""
 
@@ -45,6 +51,6 @@ async def stream_anthropic_completion(messages: list, phrase_queue: asyncio.Queu
             await phrase_queue.put(working_string.strip())
         await phrase_queue.put(None)
 
-    except Exception:
+    except Exception as e:
         await phrase_queue.put(None)
-        raise HTTPException(status_code=500, detail="Error calling Anthropic API.")
+        raise HTTPException(status_code=500, detail=f"Error calling Anthropic API: {e}")

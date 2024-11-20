@@ -1,5 +1,5 @@
 GENERAL_TTS:
-  TTS_PROVIDER: "azure"  # Possible values: "openai", "azure"
+  TTS_PROVIDER: "openai"  # Possible values: "openai", "azure"
   DELIMITERS: [". ", "? ", "! "]  # Relevant for upstream text segmentation
   MINIMUM_PHRASE_LENGTH: 25  # Minimum length for a phrase before splitting
 

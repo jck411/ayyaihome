@@ -2,6 +2,7 @@ import os
 import yaml
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
+from anthropic import AsyncAnthropic
 import azure.cognitiveservices.speech as speechsdk
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -91,6 +92,8 @@ class Config:
 
     # OpenAI Credentials from .env or config.yaml
     OPENAI_API_KEY: Optional[str] = config_data.get('OPENAI_API_KEY') or os.getenv("OPENAI_API_KEY")
+    # Anthropic Credentials from .env or config.yaml
+    ANTHROPIC_API_KEY: Optional[str] = config_data.get('ANTHROPIC_API_KEY') or os.getenv("ANTHROPIC_API_KEY")
 
     @staticmethod
     def get_playback_rate() -> int:
@@ -107,6 +110,15 @@ def get_openai_client() -> AsyncOpenAI:
     if not api_key:
         raise ValueError("OpenAI API key is not set.")
     return AsyncOpenAI(api_key=api_key)
+
+# Initialize the Anthropic API client using dependency injection
+def get_anthropic_client() -> AsyncAnthropic:
+    api_key = Config.ANTHROPIC_API_KEY
+    if not api_key:
+        raise ValueError("Anthropic API key is not set.")
+    return AsyncAnthropic(api_key=api_key)
+
+
 
 # Initialize the Azure Speech SDK configuration
 def get_azure_speech_config() -> speechsdk.SpeechConfig:
