@@ -1,3 +1,5 @@
+# /path/to/your/project/endpoints.py
+
 import os
 import asyncio
 import queue
@@ -8,14 +10,13 @@ from backend.config import Config  # Import configuration settings
 from backend.text_generation.openai_chat_completions import stream_completion  # Import OpenAI streaming function
 from backend.text_generation.anthropic_chat_completions import stream_anthropic_completion  # Import Anthropic streaming function
 from backend.stream_processing import process_streams  # Import stream processing function
-from anthropic import AsyncAnthropic
-from backend.utils.request_utils import validate_and_prepare_for_anthropic, validate_and_prepare_for_openai_completion  # Import utility functions
+from backend.utils.request_utils import (
+    validate_and_prepare_for_anthropic,
+    validate_and_prepare_for_openai_completion
+)  # Import utility functions
 
 # Initialize FastAPI router for defining endpoints
 router = APIRouter()
-
-# Initialize the Anthropic asynchronous client
-client = AsyncAnthropic()
 
 @router.post("/api/anthropic")
 async def chat_with_anthropic(request: Request):

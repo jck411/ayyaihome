@@ -1,12 +1,14 @@
+# /path/to/your/project/text_generation/anthropic_chat_completions.py
+
 import asyncio
 from anthropic import AsyncAnthropic
 from fastapi import HTTPException
-from backend.config import Config, get_anthropic_client  # Import both Config and the client factory
-
+from backend.config import Config, get_anthropic_client
+from backend.TTS.phrase_preparation.phrase_segmentation import segment_and_dispatch_phrases 
 
 async def stream_anthropic_completion(
-    messages: list, 
-    phrase_queue: asyncio.Queue, 
+    messages: list,
+    phrase_queue: asyncio.Queue,
     client: AsyncAnthropic = None
 ):
     """
@@ -15,11 +17,11 @@ async def stream_anthropic_completion(
     Args:
         messages (list): The list of message dicts with 'role' and 'content' keys.
         phrase_queue (asyncio.Queue): The queue to hold phrases for processing.
-        client (AsyncAnthropic): Optional Anthropic client instance. Defaults to a client created via get_anthropic_client().
+        client (AsyncAnthropic): Optional Anthropic client instance.
     """
     # Use provided client or initialize default
     client = client or get_anthropic_client()
-    
+
     try:
         working_string = ""
 
@@ -36,17 +38,17 @@ async def stream_anthropic_completion(
                 content = text_chunk or ""
 
                 if content:
-                    yield content
-                    working_string += content
-                    while len(working_string) >= Config.MINIMUM_PHRASE_LENGTH:
-                        delimiter_index = next(
-                            (working_string.find(d, Config.MINIMUM_PHRASE_LENGTH) for d in Config.DELIMITERS
-                             if working_string.find(d, Config.MINIMUM_PHRASE_LENGTH) != -1), -1)
-                        if delimiter_index == -1:
-                            break
-                        phrase, working_string = working_string[:delimiter_index + 1].strip(), working_string[delimiter_index + 1:]
-                        await phrase_queue.put(phrase)
+                    yield content  # Stream to front end immediately
 
+                    # Use the shared utility function
+                    working_string = await segment_and_dispatch_phrases(
+                        working_string,
+                        content,
+                        phrase_queue,
+                        Config
+                    )
+
+        # Handle any remaining content
         if working_string.strip():
             await phrase_queue.put(working_string.strip())
         await phrase_queue.put(None)

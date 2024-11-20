@@ -1,3 +1,5 @@
+# /path/to/your/project/config.py
+
 import os
 import yaml
 from dotenv import load_dotenv
@@ -26,6 +28,8 @@ class Config:
     """
     Configuration class to hold all settings for TTS and LLM models.
     """
+
+    PHRASE_PROCESSING_MODULE: str = config_data.get('PHRASE_PROCESSING_MODULE', 'phrase_queue')
 
     # GENERAL_TTS
     GENERAL_TTS: Dict[str, Any] = config_data.get('GENERAL_TTS', {})
@@ -117,8 +121,6 @@ def get_anthropic_client() -> AsyncAnthropic:
     if not api_key:
         raise ValueError("Anthropic API key is not set.")
     return AsyncAnthropic(api_key=api_key)
-
-
 
 # Initialize the Azure Speech SDK configuration
 def get_azure_speech_config() -> speechsdk.SpeechConfig:

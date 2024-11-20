@@ -1,3 +1,5 @@
+# /path/to/your/project/stream_processing.py
+
 import asyncio
 import queue
 from backend.TTS.openai_tts import text_to_speech_processor as openai_text_to_speech_processor
@@ -15,9 +17,9 @@ async def process_streams(phrase_queue: asyncio.Queue, audio_queue: queue.Queue)
         tts_processor = None
         playback_rate = Config.get_playback_rate()
 
-        if Config.TTS_PROVIDER == "openai":
+        if Config.TTS_PROVIDER.lower() == "openai":
             tts_processor = openai_text_to_speech_processor
-        elif Config.TTS_PROVIDER == "azure":
+        elif Config.TTS_PROVIDER.lower() == "azure":
             tts_processor = azure_text_to_speech_processor
         else:
             raise ValueError(f"Unsupported TTS provider: {Config.TTS_PROVIDER}")
@@ -31,4 +33,5 @@ async def process_streams(phrase_queue: asyncio.Queue, audio_queue: queue.Queue)
         # Wait for the TTS task to complete
         await tts_task
     except Exception as e:
+        # Handle exceptions appropriately
         pass

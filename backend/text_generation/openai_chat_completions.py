@@ -1,8 +1,10 @@
-# /home/jack/ayyaihome/backend/text_generation/openai_chat_completions.py
+# /path/to/your/project/text_generation/openai_chat_completions.py
+
 import asyncio
 from typing import List, Dict, Optional
 from openai import AsyncOpenAI
-from backend.config import Config, get_openai_client  # Absolute import
+from backend.config import Config, get_openai_client
+from backend.TTS.phrase_preparation.phrase_segmentation import segment_and_dispatch_phrases 
 
 async def stream_completion(
     messages: List[Dict[str, str]],
@@ -18,7 +20,7 @@ async def stream_completion(
     try:
         # Use model from Config.RESPONSE_MODEL, which loads from config.yaml
         response = await openai_client.chat.completions.create(
-            model=Config.RESPONSE_MODEL,  # Directly using model from Config
+            model=Config.RESPONSE_MODEL,
             messages=messages,
             stream=True,
             temperature=Config.TEMPERATURE,
@@ -31,17 +33,17 @@ async def stream_completion(
                 content = chunk.choices[0].delta.content or ""
 
                 if content:
-                    yield content
-                    working_string += content
-                    while len(working_string) >= Config.MINIMUM_PHRASE_LENGTH:
-                        delimiter_index = next(
-                            (working_string.find(d, Config.MINIMUM_PHRASE_LENGTH) for d in Config.DELIMITERS
-                             if working_string.find(d, Config.MINIMUM_PHRASE_LENGTH) != -1), -1)
-                        if delimiter_index == -1:
-                            break
-                        phrase, working_string = working_string[:delimiter_index + 1].strip(), working_string[delimiter_index + 1:]
-                        await phrase_queue.put(phrase)
+                    yield content  # Stream to front end immediately
 
+                    # Use the shared utility function
+                    working_string = await segment_and_dispatch_phrases(
+                        working_string,
+                        content,
+                        phrase_queue,
+                        Config
+                    )
+
+        # Handle any remaining content
         if working_string.strip():
             await phrase_queue.put(working_string.strip())
         await phrase_queue.put(None)
