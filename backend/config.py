@@ -111,11 +111,21 @@ class Config:
     @staticmethod
     def get_playback_rate() -> int:
         if Config.TTS_PROVIDER.lower() == "openai":
-            return Config.OPENAI_PLAYBACK_RATE
+            audio_format = Config.OPENAI_TTS_CONFIG.get('AUDIO_RESPONSE_FORMAT', 'pcm')
+            format_rates = Config.OPENAI_TTS_CONFIG.get('AUDIO_FORMAT_RATES', {})
         elif Config.TTS_PROVIDER.lower() == "azure":
-            return Config.AZURE_PLAYBACK_RATE
+            audio_format = Config.AZURE_TTS_CONFIG.get('AUDIO_FORMAT', 'Raw24Khz16BitMonoPcm')
+            format_rates = Config.AZURE_TTS_CONFIG.get('AUDIO_FORMAT_RATES', {})
         else:
             raise ValueError(f"Unsupported TTS_PROVIDER: {Config.TTS_PROVIDER}")
+        
+        # Fetch the rate dynamically based on the chosen audio format
+        playback_rate = format_rates.get(audio_format)
+        if playback_rate is None:
+            raise ValueError(f"Unsupported AUDIO_FORMAT: {audio_format}. Please specify a valid audio format.")
+        
+        return playback_rate
+
 
 # Initialize the OpenAI API client using dependency injection
 def get_openai_client() -> AsyncOpenAI:
