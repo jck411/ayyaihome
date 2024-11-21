@@ -29,6 +29,15 @@ class Config:
     Configuration class to hold all settings for TTS and LLM models.
     """
 
+    # Processing Pipeline Settings
+    PROCESSING_PIPELINE: Dict[str, Any] = config_data.get('PROCESSING_PIPELINE', {})
+    USE_PHRASE_SEGMENTATION: bool = PROCESSING_PIPELINE.get('USE_PHRASE_SEGMENTATION', True)
+    DELIMITERS: List[str] = PROCESSING_PIPELINE.get('DELIMITERS', [". ", "? ", "! "])
+    MINIMUM_PHRASE_LENGTH: int = PROCESSING_PIPELINE.get('MINIMUM_PHRASE_LENGTH', 25)
+    MODULES: List[str] = PROCESSING_PIPELINE.get('MODULES', [])
+    TOKENIZER_TYPE: str = PROCESSING_PIPELINE.get('TOKENIZER', {}).get('TYPE', 'none')
+    CUSTOM_TEXT_MODIFIER_ENABLED: bool = PROCESSING_PIPELINE.get('CUSTOM_TEXT_MODIFIER', {}).get('ENABLED', False)
+    
     PHRASE_PROCESSING_MODULE: str = config_data.get('PHRASE_PROCESSING_MODULE', 'phrase_queue')
 
     # GENERAL_TTS

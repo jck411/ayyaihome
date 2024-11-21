@@ -1,7 +1,17 @@
 GENERAL_TTS:
-  TTS_PROVIDER: "azure"  # Possible values: "openai", "azure"
-  DELIMITERS: [". ", "? ", "! "]  # Relevant for upstream text segmentation
-  MINIMUM_PHRASE_LENGTH: 25  # Minimum length for a phrase before splitting
+  TTS_PROVIDER: "openai"  # Possible values: "openai", "azure"
+
+PROCESSING_PIPELINE:
+  USE_PHRASE_SEGMENTATION: true  # Set to false to turn off segmentation during streaming
+  DELIMITERS: [". ", "? ", "! "]  # If segmentation is used
+  MINIMUM_PHRASE_LENGTH: 25  # If segmentation is used
+  MODULES:  # List of modules to include in the pipeline
+    - tokenizer
+    - custom_text_modifier
+  TOKENIZER:
+    TYPE: "none"  # Options: "nltk", "stanza", "none"
+  CUSTOM_TEXT_MODIFIER:
+    ENABLED: false
 
 TTS_MODELS:
   OPENAI_TTS:
