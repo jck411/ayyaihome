@@ -1,11 +1,8 @@
 
 PHRASE_PROCESSING_MODULE: "phrase_queue"  # Specify the default value or update as required
 
-
 GENERAL_TTS:
   TTS_PROVIDER: "azure"  # Possible values: "openai", "azure"
-  DELIMITERS: [". ", "? ", "! "]  # Add if intended to be part of GENERAL_TTS
-  MINIMUM_PHRASE_LENGTH: 25  # Add if intended to be part of GENERAL_TTS
 
 PROCESSING_PIPELINE:
   USE_PHRASE_SEGMENTATION: true  # Set to false to turn off segmentation during streaming
@@ -74,8 +71,8 @@ LLM_MODEL_CONFIG:
 
   ANTHROPIC:
     RESPONSE_MODEL: "claude-3-5-haiku-20241022"
-    TEMPERATURE: 0.7
-    TOP_P: 0.9
+    TEMPERATURE: 1
+    TOP_P: 1
     SYSTEM_PROMPT: "you are a dry and witty assistant"
     MAX_TOKENS: 1024
     STOP_SEQUENCES: null

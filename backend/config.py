@@ -1,5 +1,3 @@
-# /path/to/your/project/config.py
-
 import os
 import yaml
 from dotenv import load_dotenv
@@ -43,8 +41,6 @@ class Config:
     # GENERAL_TTS
     GENERAL_TTS: Dict[str, Any] = config_data.get('GENERAL_TTS', {})
     TTS_PROVIDER: str = GENERAL_TTS.get('TTS_PROVIDER', "azure")
-    DELIMITERS: List[str] = GENERAL_TTS.get('DELIMITERS', [". ", "? ", "! "])
-    MINIMUM_PHRASE_LENGTH: int = GENERAL_TTS.get('MINIMUM_PHRASE_LENGTH', 25)
 
     # TTS_MODELS
     TTS_MODELS: Dict[str, Any] = config_data.get('TTS_MODELS', {})
@@ -57,13 +53,15 @@ class Config:
     OPENAI_AUDIO_RESPONSE_FORMAT: str = OPENAI_TTS_CONFIG.get('AUDIO_RESPONSE_FORMAT', "pcm")
     OPENAI_PLAYBACK_RATE: int = OPENAI_TTS_CONFIG.get('PLAYBACK_RATE', 24000)
     OPENAI_TTS_CHUNK_SIZE: int = OPENAI_TTS_CONFIG.get('TTS_CHUNK_SIZE', 1024)
+    OPENAI_AUDIO_FORMAT_RATES: Dict[str, int] = OPENAI_TTS_CONFIG.get('AUDIO_FORMAT_RATES', {})
 
     # TTS_MODELS - Azure
     AZURE_TTS_CONFIG: Dict[str, Any] = TTS_MODELS.get('AZURE_TTS', {})
-    AZURE_TTS_SPEED: str = AZURE_TTS_CONFIG['TTS_SPEED']  # Mandatory
-    AZURE_TTS_VOICE: str = AZURE_TTS_CONFIG['TTS_VOICE']  # Mandatory
-    AZURE_AUDIO_FORMAT: str = AZURE_TTS_CONFIG['AUDIO_FORMAT']  # Mandatory
-    AZURE_PLAYBACK_RATE: int = AZURE_TTS_CONFIG['PLAYBACK_RATE']  # Mandatory
+    AZURE_TTS_SPEED: str = AZURE_TTS_CONFIG.get('TTS_SPEED')  # Mandatory
+    AZURE_TTS_VOICE: str = AZURE_TTS_CONFIG.get('TTS_VOICE')  # Mandatory
+    AZURE_AUDIO_FORMAT: str = AZURE_TTS_CONFIG.get('AUDIO_FORMAT')  # Mandatory
+    AZURE_PLAYBACK_RATE: int = AZURE_TTS_CONFIG.get('PLAYBACK_RATE')  # Mandatory
+    AZURE_AUDIO_FORMAT_RATES: Dict[str, int] = AZURE_TTS_CONFIG.get('AUDIO_FORMAT_RATES', {})
 
     # LLM_MODEL_CONFIG - OpenAI
     LLM_CONFIG: Dict[str, Any] = config_data.get('LLM_MODEL_CONFIG', {}).get('OPENAI', {})
@@ -100,8 +98,8 @@ class Config:
     DEFAULT_RATE: Optional[int] = AUDIO_PLAYBACK_CONFIG.get('RATE', 24000)  # Default if no provider-specific rate
 
     # Azure Credentials from .env
-    AZURE_SUBSCRIPTION_KEY: Optional[str] = os.getenv("AZURE_SUBSCRIPTION_KEY")
-    AZURE_REGION: Optional[str] = os.getenv("AZURE_REGION")
+    AZURE_SPEECH_KEY: Optional[str] = os.getenv("AZURE_SPEECH_KEY")
+    AZURE_SERVICE_REGION: Optional[str] = os.getenv("AZURE_SERVICE_REGION")
 
     # OpenAI Credentials from .env or config.yaml
     OPENAI_API_KEY: Optional[str] = config_data.get('OPENAI_API_KEY') or os.getenv("OPENAI_API_KEY")
@@ -111,11 +109,11 @@ class Config:
     @staticmethod
     def get_playback_rate() -> int:
         if Config.TTS_PROVIDER.lower() == "openai":
-            audio_format = Config.OPENAI_TTS_CONFIG.get('AUDIO_RESPONSE_FORMAT', 'pcm')
-            format_rates = Config.OPENAI_TTS_CONFIG.get('AUDIO_FORMAT_RATES', {})
+            audio_format = Config.OPENAI_AUDIO_RESPONSE_FORMAT
+            format_rates = Config.OPENAI_AUDIO_FORMAT_RATES
         elif Config.TTS_PROVIDER.lower() == "azure":
-            audio_format = Config.AZURE_TTS_CONFIG.get('AUDIO_FORMAT', 'Raw24Khz16BitMonoPcm')
-            format_rates = Config.AZURE_TTS_CONFIG.get('AUDIO_FORMAT_RATES', {})
+            audio_format = Config.AZURE_AUDIO_FORMAT
+            format_rates = Config.AZURE_AUDIO_FORMAT_RATES
         else:
             raise ValueError(f"Unsupported TTS_PROVIDER: {Config.TTS_PROVIDER}")
         
@@ -143,8 +141,8 @@ def get_anthropic_client() -> AsyncAnthropic:
 
 # Initialize the Azure Speech SDK configuration
 def get_azure_speech_config() -> speechsdk.SpeechConfig:
-    subscription_key = Config.AZURE_SUBSCRIPTION_KEY
-    region = Config.AZURE_REGION
+    subscription_key = Config.AZURE_SPEECH_KEY
+    region = Config.AZURE_SERVICE_REGION
     if not subscription_key or not region:
         raise ValueError("Azure Speech credentials are not set.")
     speech_config = speechsdk.SpeechConfig(subscription=subscription_key, region=region)
