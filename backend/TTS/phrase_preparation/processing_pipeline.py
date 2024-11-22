@@ -30,7 +30,8 @@ async def process_pipeline(text: str) -> str:
                 # Combine back to text
                 text = ' '.join(processed_phrases) + ' ' + working_string
         elif module_name == 'tokenizer':
-            text = await tokenize_text(text, Config.TOKENIZER_TYPE)
+            # Modify this line:
+            text = await tokenize_text(text)
         elif module_name == 'custom_text_modifier':
             if Config.CUSTOM_TEXT_MODIFIER_ENABLED:
                 text = await modify_text(text)
@@ -40,6 +41,7 @@ async def process_pipeline(text: str) -> str:
 
     # Return the final processed text
     return text.strip()
+
 
 async def dispatch_to_phrase_queue(text: str, phrase_queue: asyncio.Queue):
     """

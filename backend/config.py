@@ -34,6 +34,28 @@ class Config:
     # The modules are applied in the order they appear in the list.
     MODULES: List[str] = PROCESSING_PIPELINE.get('MODULES', [])
 
+    # Tokenizer settings
+    TOKENIZER_TYPE: str = PROCESSING_PIPELINE.get('TOKENIZER', {}).get('TYPE', 'none')
+
+    if TOKENIZER_TYPE == 'nltk':
+        # Extract NLTK configurations
+        NLTK_CONFIG: Dict[str, Any] = PROCESSING_PIPELINE.get('TOKENIZER', {}).get('NLTK', {})
+        NLTK_LANGUAGE: str = NLTK_CONFIG.get('LANGUAGE')
+        NLTK_TOKENIZER: str = NLTK_CONFIG.get('TOKENIZER')
+        NLTK_PRESERVE_LINE: bool = NLTK_CONFIG.get('PRESERVE_LINE')
+    elif TOKENIZER_TYPE == 'stanza':
+        # Extract Stanza configurations
+        STANZA_CONFIG: Dict[str, Any] = PROCESSING_PIPELINE.get('TOKENIZER', {}).get('STANZA', {})
+        STANZA_LANGUAGE: str = STANZA_CONFIG.get('LANGUAGE')
+        STANZA_PROCESSORS: str = STANZA_CONFIG.get('PROCESSORS')
+        STANZA_TOKENIZE_NO_SSPLIT: bool = STANZA_CONFIG.get('TOKENIZE_NO_SSPLIT')
+        STANZA_USE_GPU: bool = STANZA_CONFIG.get('USE_GPU')
+        STANZA_VERBOSE: bool = STANZA_CONFIG.get('VERBOSE')
+    elif TOKENIZER_TYPE == 'none':
+        pass  # No tokenizer settings needed
+    else:
+        raise ValueError(f"Unsupported TOKENIZER_TYPE: {TOKENIZER_TYPE}")
+
     # Segmentation settings
     USE_PHRASE_SEGMENTATION: bool = PROCESSING_PIPELINE.get('USE_PHRASE_SEGMENTATION', True)
 

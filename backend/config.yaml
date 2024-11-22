@@ -1,46 +1,69 @@
 GENERAL_TTS:
-  TTS_PROVIDER: "azure"  # Possible values: "openai", "azure"
+  TTS_PROVIDER: "openai"  # Possible values: "openai", "azure"
 
 PROCESSING_PIPELINE:
-  USE_PHRASE_SEGMENTATION: true  # Set to false to turn off segmentation during streaming
+  # === Segmentation Settings ===
+  USE_PHRASE_SEGMENTATION: false # (global setting) Set to false to turn off segmentation during streaming
   DELIMITERS: [". ", "? ", "! "]  # Delimiters used for segmentation
   MINIMUM_PHRASE_LENGTH: 25  # Minimum length before attempting segmentation
-  MODULES:  # List of modules to include in the pipeline
-    - segmentation
+
+  # === Modules to Include ===
+  MODULES:
+ #  - segmentation
     - tokenizer
-    - custom_text_modifier
+ #   - custom_text_modifier
+
+  # === Tokenizer Settings ===
   TOKENIZER:
-    TYPE: "none"  # Options: "nltk", "stanza", "none"
+    TYPE: "stanza"  # Options: "nltk", "stanza", "none"
+
+    # --- NLTK Tokenizer Options ---
+    NLTK:
+      LANGUAGE: "english"  # Language for NLTK tokenizer (e.g., "english", "spanish")
+      TOKENIZER: "word_tokenize"  # Tokenizer to use: "word_tokenize", "TreebankWordTokenizer", "TweetTokenizer"
+      PRESERVE_LINE: false  # Whether to preserve line breaks (only applicable for "word_tokenize")
+
+    # --- Stanza Tokenizer Options ---
+    STANZA:
+      LANGUAGE: "en"  # Language code for Stanza tokenizer (e.g., "en", "es")
+      PROCESSORS: "tokenize"  # Processors to use, comma-separated (e.g., "tokenize,pos,lemma")
+      TOKENIZE_NO_SSPLIT: false  # Set to true to disable sentence splitting
+      USE_GPU: true  # Whether to use GPU for processing
+      VERBOSE: true  # Whether to output verbose logs
+
+  # === Custom Text Modifier Settings ===
   CUSTOM_TEXT_MODIFIER:
-    ENABLED: false
+    ENABLED: false  # Set to true to enable custom text modification
 
 TTS_MODELS:
+  # OpenAI TTS Configuration
   OPENAI_TTS:
     TTS_CHUNK_SIZE: 1024
     TTS_SPEED: 1.0  # Possible values: 0.5 (slower) to 2.0 (faster); 1.0 is standard speed
-    TTS_VOICE: "alloy"  # Possible values: alloy, echo, fable, onyx, nova, and shimmer.
+    TTS_VOICE: "alloy"  # Possible values: alloy, echo, fable, onyx, nova, and shimmer
     TTS_MODEL: "tts-1"  # Possible values: model-specific, e.g., "tts-1", "tts-2"
     AUDIO_RESPONSE_FORMAT: "pcm"  # Possible values: "pcm" (default), "mp3", "wav"; audio encoding formats
-    AUDIO_FORMAT_RATES:  # Define playback rates for each possible format dynamically
+    AUDIO_FORMAT_RATES:
       pcm: 24000  # Sample rate for PCM audio
       mp3: 44100  # Sample rate for MP3 audio
       wav: 48000  # Sample rate for WAV audio
     PLAYBACK_RATE: 24000  # Default sample rate for OpenAI audio playback
 
+  # Azure TTS Configuration
   AZURE_TTS:
     TTS_SPEED: "0%"  # Can be percentage or numerical value; e.g., "0%", "50%", "-20%"
     TTS_VOICE: "en-US-KaiNeural"  # Replace with your desired Azure voice
     SPEECH_SYNTHESIS_RATE: "0%"  # Percentage or numerical value
     AUDIO_FORMAT: "Raw24Khz16BitMonoPcm"  # Mapping playback and format below
-    AUDIO_FORMAT_RATES:  # Define playback rates for each possible format dynamically
-      Raw8Khz16BitMonoPcm: 8000  # Playback rate for Raw8Khz16BitMonoPcm
-      Raw16Khz16BitMonoPcm: 16000  # Playback rate for Raw16Khz16BitMonoPcm
-      Raw24Khz16BitMonoPcm: 24000  # Playback rate for Raw24Khz16BitMonoPcm
-      Raw44100Hz16BitMonoPcm: 44100  # Playback rate for Raw44100Hz16BitMonoPcm
-      Raw48Khz16BitMonoPcm: 48000  # Playback rate for Raw48Khz16BitMonoPcm
-    PLAYBACK_RATE: 24000  # Default: Ensure this matches the playback rate of the selected AUDIO_FORMAT
-    ENABLE_PROFANITY_FILTER: false  # Optional: Enable or disable profanity filter
-    STABILITY: 0  # Optional: Controls stability of neural voices
+    AUDIO_FORMAT_RATES:
+      Raw8Khz16BitMonoPcm: 8000
+      Raw16Khz16BitMonoPcm: 16000
+      Raw24Khz16BitMonoPcm: 24000
+      Raw44100Hz16BitMonoPcm: 44100
+      Raw48Khz16BitMonoPcm: 48000
+    PLAYBACK_RATE: 24000  # Default playback rate
+    ENABLE_PROFANITY_FILTER: false
+    STABILITY: 0
     PROSODY:
       rate: "1.0"      # Adjust as needed, e.g., "1.0", "slow", "fast"
       pitch: "0%"      # Adjust as needed, e.g., "+10%", "-5%"
@@ -77,10 +100,10 @@ LLM_MODEL_CONFIG:
       include_usage: true
 
 AUDIO_PLAYBACK_CONFIG:
-  FORMAT: 16  # Possible values: integer (e.g., 8, 16, 32); represents bits per sample, typically 8 or 16 for PCM
-  CHANNELS: 1  # Possible values: 1 (mono), 2 (stereo); sets audio channels
+  FORMAT: 16  # Bits per sample, typically 8 or 16 for PCM
+  CHANNELS: 1  # 1 (mono), 2 (stereo)
   RATE: null  # Dynamically set at runtime based on TTS_PROVIDER
 
 LOGGING:
-  ENABLED: true  # Set to false to disable logging
-  LEVEL: "DEBUG"  # Possible values: "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"
+  ENABLED: true
+  LEVEL: "DEBUG"  # "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"
