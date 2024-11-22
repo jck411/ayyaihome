@@ -1,14 +1,12 @@
-
-PHRASE_PROCESSING_MODULE: "phrase_queue"  # Specify the default value or update as required
-
 GENERAL_TTS:
   TTS_PROVIDER: "azure"  # Possible values: "openai", "azure"
 
 PROCESSING_PIPELINE:
   USE_PHRASE_SEGMENTATION: true  # Set to false to turn off segmentation during streaming
-  DELIMITERS: [". ", "? ", "! "]  # If segmentation is used
-  MINIMUM_PHRASE_LENGTH: 25  # If segmentation is used
+  DELIMITERS: [". ", "? ", "! "]  # Delimiters used for segmentation
+  MINIMUM_PHRASE_LENGTH: 25  # Minimum length before attempting segmentation
   MODULES:  # List of modules to include in the pipeline
+    - segmentation
     - tokenizer
     - custom_text_modifier
   TOKENIZER:
@@ -33,7 +31,7 @@ TTS_MODELS:
     TTS_SPEED: "0%"  # Can be percentage or numerical value; e.g., "0%", "50%", "-20%"
     TTS_VOICE: "en-US-KaiNeural"  # Replace with your desired Azure voice
     SPEECH_SYNTHESIS_RATE: "0%"  # Percentage or numerical value
-    AUDIO_FORMAT: "Raw24Khz16BitMonoPcm"  # mapping playback and format below
+    AUDIO_FORMAT: "Raw24Khz16BitMonoPcm"  # Mapping playback and format below
     AUDIO_FORMAT_RATES:  # Define playback rates for each possible format dynamically
       Raw8Khz16BitMonoPcm: 8000  # Playback rate for Raw8Khz16BitMonoPcm
       Raw16Khz16BitMonoPcm: 16000  # Playback rate for Raw16Khz16BitMonoPcm
@@ -47,7 +45,6 @@ TTS_MODELS:
       rate: "1.0"      # Adjust as needed, e.g., "1.0", "slow", "fast"
       pitch: "0%"      # Adjust as needed, e.g., "+10%", "-5%"
       volume: "default"  # Adjust as needed, e.g., "loud", "soft"
-
 
 LLM_MODEL_CONFIG:
   OPENAI:
@@ -86,4 +83,4 @@ AUDIO_PLAYBACK_CONFIG:
 
 LOGGING:
   ENABLED: true  # Set to false to disable logging
-  LEVEL: "INFO"  # Possible values: "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"
+  LEVEL: "DEBUG"  # Possible values: "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"

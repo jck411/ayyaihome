@@ -1,4 +1,4 @@
-# /home/jack/ayyaihome/backend/text_generation/tokenizer.py
+# /home/jack/ayyaihome/backend/TTS/phrase_preparation/tokenizer.py
 
 import asyncio
 
@@ -22,7 +22,7 @@ async def tokenize_text(text: str, tokenizer_type: str) -> str:
     elif tokenizer_type == 'stanza':
         # Perform Stanza tokenization
         import stanza
-        stanza.download('en', quiet=True)
+        stanza.download('en', processors='tokenize', verbose=False)
         nlp = stanza.Pipeline('en', processors='tokenize', verbose=False)
         doc = nlp(text)
         tokens = [word.text for sent in doc.sentences for word in sent.words]

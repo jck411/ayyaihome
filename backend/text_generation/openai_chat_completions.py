@@ -5,11 +5,8 @@ from typing import List, Dict, Optional
 from openai import AsyncOpenAI
 from fastapi import HTTPException
 from backend.config import Config, get_openai_client
-from backend.TTS.phrase_preparation.phrase_segmentation import segment_and_dispatch_phrases
-from backend.TTS.phrase_preparation.phrase_dispatchers import (
-    dispatch_to_phrase_queue,
-    dispatch_to_other_module
-)
+from backend.TTS.phrase_preparation.processing_pipeline import process_pipeline
+from backend.TTS.phrase_preparation.phrase_segmentation import segment_text
 
 async def stream_completion(
     messages: List[Dict[str, str]],
@@ -17,7 +14,7 @@ async def stream_completion(
     openai_client: Optional[AsyncOpenAI] = None
 ):
     """
-    Streams the completion from OpenAI and handles phrase segmentation and processing.
+    Streams the completion from OpenAI and processes the text through the pipeline.
 
     Args:
         messages (List[Dict[str, str]]): The list of message dicts with 'role' and 'content' keys.
@@ -38,14 +35,6 @@ async def stream_completion(
             stream_options={"include_usage": True},
         )
 
-        # Determine dispatch function based on configuration
-        if Config.PHRASE_PROCESSING_MODULE == 'phrase_queue':
-            dispatch_function = dispatch_to_phrase_queue
-        elif Config.PHRASE_PROCESSING_MODULE == 'other_module':
-            dispatch_function = dispatch_to_other_module
-        else:
-            raise ValueError(f"Unknown PHRASE_PROCESSING_MODULE: {Config.PHRASE_PROCESSING_MODULE}")
-
         async for chunk in response:
             if chunk.choices and hasattr(chunk.choices[0].delta, 'content'):
                 content = chunk.choices[0].delta.content or ""
@@ -53,27 +42,22 @@ async def stream_completion(
                 if content:
                     yield content  # Stream to front end immediately
 
-                    if Config.USE_PHRASE_SEGMENTATION:
-                        # Use the shared utility function with the dispatch function
-                        working_string = await segment_and_dispatch_phrases(
-                            working_string,
-                            content,
-                            dispatch_function,
-                            phrase_queue,
-                            Config
-                        )
-                    else:
-                        # Accumulate content without segmentation
-                        working_string += content
+                    # Accumulate content
+                    working_string += content
 
-        # After streaming is complete
-        if not Config.USE_PHRASE_SEGMENTATION:
-            # Process the whole text
-            await dispatch_function(working_string.strip(), phrase_queue)
-        else:
-            # Handle any remaining content
-            if working_string.strip():
-                await dispatch_function(working_string.strip(), phrase_queue)
+                    # Attempt to segment and dispatch phrases
+                    if Config.USE_PHRASE_SEGMENTATION:
+                        working_string, phrases = await segment_text(working_string, Config)
+                        for phrase in phrases:
+                            # Process each phrase through the pipeline
+                            processed_phrase = await process_pipeline(phrase)
+                            # Dispatch to phrase queue
+                            await phrase_queue.put(processed_phrase)
+
+        # After streaming is complete, process any remaining content
+        if working_string.strip():
+            processed_text = await process_pipeline(working_string.strip())
+            await phrase_queue.put(processed_text)
 
         # Signal that processing is complete
         await phrase_queue.put(None)

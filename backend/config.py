@@ -27,22 +27,33 @@ class Config:
     Configuration class to hold all settings for TTS and LLM models.
     """
 
-    # Processing Pipeline Settings
+    # === Processing Pipeline Settings ===
     PROCESSING_PIPELINE: Dict[str, Any] = config_data.get('PROCESSING_PIPELINE', {})
-    USE_PHRASE_SEGMENTATION: bool = PROCESSING_PIPELINE.get('USE_PHRASE_SEGMENTATION', True)
-    DELIMITERS: List[str] = PROCESSING_PIPELINE.get('DELIMITERS', [". ", "? ", "! "])
-    MINIMUM_PHRASE_LENGTH: int = PROCESSING_PIPELINE.get('MINIMUM_PHRASE_LENGTH', 25)
-    MODULES: List[str] = PROCESSING_PIPELINE.get('MODULES', [])
-    TOKENIZER_TYPE: str = PROCESSING_PIPELINE.get('TOKENIZER', {}).get('TYPE', 'none')
-    CUSTOM_TEXT_MODIFIER_ENABLED: bool = PROCESSING_PIPELINE.get('CUSTOM_TEXT_MODIFIER', {}).get('ENABLED', False)
-    
-    PHRASE_PROCESSING_MODULE: str = config_data.get('PHRASE_PROCESSING_MODULE', 'phrase_queue')
 
-    # GENERAL_TTS
+    # List of modules to include in the processing pipeline.
+    # The modules are applied in the order they appear in the list.
+    MODULES: List[str] = PROCESSING_PIPELINE.get('MODULES', [])
+
+    # Segmentation settings
+    USE_PHRASE_SEGMENTATION: bool = PROCESSING_PIPELINE.get('USE_PHRASE_SEGMENTATION', True)
+
+    # Delimiters used to split text into phrases.
+    DELIMITERS: List[str] = PROCESSING_PIPELINE.get('DELIMITERS', [". ", "? ", "! "])
+
+    # Minimum length of text before attempting to find a delimiter for segmentation.
+    MINIMUM_PHRASE_LENGTH: int = PROCESSING_PIPELINE.get('MINIMUM_PHRASE_LENGTH', 25)
+
+    # Tokenizer settings
+    TOKENIZER_TYPE: str = PROCESSING_PIPELINE.get('TOKENIZER', {}).get('TYPE', 'none')
+
+    # Custom Text Modifier settings
+    CUSTOM_TEXT_MODIFIER_ENABLED: bool = PROCESSING_PIPELINE.get('CUSTOM_TEXT_MODIFIER', {}).get('ENABLED', False)
+
+    # === GENERAL_TTS ===
     GENERAL_TTS: Dict[str, Any] = config_data.get('GENERAL_TTS', {})
     TTS_PROVIDER: str = GENERAL_TTS.get('TTS_PROVIDER', "azure")
 
-    # TTS_MODELS
+    # === TTS_MODELS ===
     TTS_MODELS: Dict[str, Any] = config_data.get('TTS_MODELS', {})
 
     # TTS_MODELS - OpenAI
@@ -63,7 +74,7 @@ class Config:
     AZURE_PLAYBACK_RATE: int = AZURE_TTS_CONFIG.get('PLAYBACK_RATE')  # Mandatory
     AZURE_AUDIO_FORMAT_RATES: Dict[str, int] = AZURE_TTS_CONFIG.get('AUDIO_FORMAT_RATES', {})
 
-    # LLM_MODEL_CONFIG - OpenAI
+    # === LLM_MODEL_CONFIG - OpenAI ===
     LLM_CONFIG: Dict[str, Any] = config_data.get('LLM_MODEL_CONFIG', {}).get('OPENAI', {})
     RESPONSE_MODEL: str = LLM_CONFIG.get('RESPONSE_MODEL', "gpt-4o-mini")
     TEMPERATURE: float = LLM_CONFIG.get('TEMPERATURE', 1.0)
@@ -81,7 +92,7 @@ class Config:
     TOOL_CHOICE: Optional[Any] = LLM_CONFIG.get('TOOL_CHOICE', None)
     MODALITIES: List[str] = LLM_CONFIG.get('MODALITIES', ["text"])
 
-    # LLM_MODEL_CONFIG - Anthropic
+    # === LLM_MODEL_CONFIG - Anthropic ===
     ANTHROPIC_CONFIG: Dict[str, Any] = config_data.get('LLM_MODEL_CONFIG', {}).get('ANTHROPIC', {})
     ANTHROPIC_RESPONSE_MODEL: str = ANTHROPIC_CONFIG.get('RESPONSE_MODEL', "claude-3-haiku-20240307")
     ANTHROPIC_TEMPERATURE: float = ANTHROPIC_CONFIG.get('TEMPERATURE', 0.7)
@@ -91,7 +102,7 @@ class Config:
     ANTHROPIC_STOP_SEQUENCES: Optional[Any] = ANTHROPIC_CONFIG.get('STOP_SEQUENCES', None)
     ANTHROPIC_STREAM_OPTIONS: Dict[str, Any] = ANTHROPIC_CONFIG.get('STREAM_OPTIONS', {"include_usage": True})
 
-    # AUDIO_PLAYBACK_CONFIG
+    # === AUDIO_PLAYBACK_CONFIG ===
     AUDIO_PLAYBACK_CONFIG: Dict[str, Any] = config_data.get('AUDIO_PLAYBACK_CONFIG', {})
     AUDIO_FORMAT: int = AUDIO_PLAYBACK_CONFIG.get('FORMAT', 16)
     CHANNELS: int = AUDIO_PLAYBACK_CONFIG.get('CHANNELS', 1)
@@ -103,6 +114,7 @@ class Config:
 
     # OpenAI Credentials from .env or config.yaml
     OPENAI_API_KEY: Optional[str] = config_data.get('OPENAI_API_KEY') or os.getenv("OPENAI_API_KEY")
+
     # Anthropic Credentials from .env or config.yaml
     ANTHROPIC_API_KEY: Optional[str] = config_data.get('ANTHROPIC_API_KEY') or os.getenv("ANTHROPIC_API_KEY")
 
@@ -123,7 +135,6 @@ class Config:
             raise ValueError(f"Unsupported AUDIO_FORMAT: {audio_format}. Please specify a valid audio format.")
         
         return playback_rate
-
 
 # Initialize the OpenAI API client using dependency injection
 def get_openai_client() -> AsyncOpenAI:
