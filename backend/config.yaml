@@ -104,11 +104,19 @@ LLM_MODEL_CONFIG:
     STREAM_OPTIONS:
       include_usage: true
 
+  GEMINI:
+    MODEL_VERSION: "gemini-1.5-flash"  # Specify the desired Gemini model version
+    TEMPERATURE: 0.7  # Adjust the temperature for response randomness
+    SYSTEM_PROMPT: "You are a knowledgeable assistant."  # Define the system instruction
+    MAX_OUTPUT_TOKENS: 150  # Set the maximum number of tokens for the response
+    TOP_P: 0.9  # Adjust the nucleus sampling parameter
+    CANDIDATE_COUNT: 1  # Number of response candidates to generate
+
 AUDIO_PLAYBACK_CONFIG:
   FORMAT: 16  # Bits per sample, typically 8 or 16 for PCM
   CHANNELS: 1  # 1 (mono), 2 (stereo)
   RATE: null  # Dynamically set at runtime based on TTS_PROVIDER
 
 LOGGING:
-  ENABLED: false
+  ENABLED: true
   LEVEL: "DEBUG"  # "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"

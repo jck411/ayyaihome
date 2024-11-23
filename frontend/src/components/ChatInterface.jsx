@@ -1,13 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Settings, Loader2 } from 'lucide-react';
 
-// Internal generateAIResponse function
 const generateAIResponse = async (service, messages, onUpdate) => {
   try {
     let endpoint = '';
     let formattedMessages = [];
 
-    // Determine the endpoint and format messages based on the selected service
     if (service === 'anthropic') {
       endpoint = 'http://localhost:8000/api/anthropic';
       formattedMessages = messages.map(msg => ({
@@ -16,12 +14,17 @@ const generateAIResponse = async (service, messages, onUpdate) => {
       }));
     } else if (service === 'openai') {
       endpoint = 'http://localhost:8000/api/openai';
-      formattedMessages = messages; // Assuming OpenAI service expects the same structure
+      formattedMessages = messages;
+    } else if (service === 'gemini') {
+      endpoint = 'http://localhost:8000/api/google';
+      formattedMessages = messages.map(msg => ({
+        role: msg.sender === "user" ? "user" : "assistant",
+        content: msg.text
+      }));
     } else {
       throw new Error('Unsupported service selected');
     }
 
-    // Send the formatted messages to the backend
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
@@ -36,7 +39,6 @@ const generateAIResponse = async (service, messages, onUpdate) => {
       throw new Error('Request to AI backend failed');
     }
 
-    // Process the streamed response
     const reader = response.body.getReader();
     const decoder = new TextDecoder('utf-8');
     let fullContent = "";
@@ -84,7 +86,6 @@ const ChatInterface = () => {
     setIsLoading(true);
 
     try {
-      // Create a placeholder for the AI response
       const aiMessageId = Date.now() + 1;
       setMessages(prev => [...prev, {
         id: aiMessageId,
@@ -93,7 +94,6 @@ const ChatInterface = () => {
         timestamp: new Date().toLocaleTimeString()
       }]);
 
-      // Handle streaming updates
       await generateAIResponse(selectedService, [...messages, newMessage], (content) => {
         setMessages(prev => prev.map(msg => 
           msg.id === aiMessageId ? { ...msg, text: content } : msg
@@ -108,7 +108,6 @@ const ChatInterface = () => {
 
   return (
     <div className="flex flex-col h-screen bg-gray-100">
-      {/* Header */}
       <div className="bg-white shadow-sm p-4 flex justify-between items-center">
         <h1 className="text-xl font-semibold text-gray-800">AYYAIHOME</h1>
         <div className="flex items-center gap-4">
@@ -119,6 +118,9 @@ const ChatInterface = () => {
           >
             <option value="anthropic">Claude</option>
             <option value="openai">GPT</option>
+            <option value="gemini">Gemini
+
+            </option>
           </select>
           <button className="p-2 hover:bg-gray-100 rounded-full">
             <Settings className="w-5 h-5 text-gray-600" />
@@ -126,7 +128,6 @@ const ChatInterface = () => {
         </div>
       </div>
 
-      {/* Chat Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.map((message) => (
           <div
@@ -152,7 +153,6 @@ const ChatInterface = () => {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Area */}
       <div className="border-t bg-white p-4">
         <div className="flex items-center gap-4 max-w-4xl mx-auto">
           <input

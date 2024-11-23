@@ -84,3 +84,20 @@ async def validate_and_prepare_for_anthropic(request: Request):
 
     # Return the validated messages
     return messages
+
+
+from fastapi import Request
+
+async def validate_and_prepare_for_google_completion(request: Request):
+    """
+    Validates and prepares the request for Google's Gemini API.
+    """
+    body = await request.json()
+    if "messages" not in body or not isinstance(body["messages"], list):
+        raise HTTPException(status_code=400, detail="Invalid or missing 'messages' field.")
+
+    for message in body["messages"]:
+        if "content" not in message:
+            raise HTTPException(status_code=400, detail="Each message must have a 'content' field.")
+
+    return body["messages"]

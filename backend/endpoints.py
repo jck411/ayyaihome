@@ -4,15 +4,22 @@ import asyncio
 import queue
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import StreamingResponse
+import logging 
 
-from backend.config import Config
 from backend.text_generation.openai_chat_completions import stream_completion
 from backend.text_generation.anthropic_chat_completions import stream_anthropic_completion
+from backend.text_generation.google_chat_completions import stream_google_completion
+
 from backend.stream_processing import process_streams
 from backend.utils.request_utils import (
     validate_and_prepare_for_anthropic,
-    validate_and_prepare_for_openai_completion
+    validate_and_prepare_for_openai_completion,
+    validate_and_prepare_for_google_completion,  
 )
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter()
 
 # Initialize FastAPI router for defining endpoints
 router = APIRouter()
@@ -47,6 +54,8 @@ async def chat_with_anthropic(request: Request):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {e}")
+    
+
 
 @router.post("/api/openai")
 async def openai_stream(request: Request):
@@ -70,6 +79,31 @@ async def openai_stream(request: Request):
         # Return the streaming response
         return StreamingResponse(
             stream_completion(
+                messages=messages,
+                phrase_queue=phrase_queue
+            ),
+            media_type='text/plain'
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {e}")
+
+
+@router.post("/api/google")
+async def google_stream(request: Request):
+    """
+    Endpoint for handling chat requests with Google's Gemini API.
+    """
+    try:
+        # Validate and prepare the request
+        messages = await validate_and_prepare_for_google_completion(request)
+
+        # Initialize a queue for streaming
+        phrase_queue = asyncio.Queue()
+
+        # Stream response from Google API
+        return StreamingResponse(
+            stream_google_completion(
                 messages=messages,
                 phrase_queue=phrase_queue
             ),
