@@ -1,5 +1,5 @@
 GENERAL_TTS:
-  TTS_PROVIDER: "openai"  # Possible values: "openai", "azure"
+  TTS_PROVIDER: "azure"  # Possible values: "openai", "azure"
 
 PROCESSING_PIPELINE:
   # === Segmentation Settings ===
@@ -9,8 +9,8 @@ PROCESSING_PIPELINE:
 
   # === Modules to Include ===
   MODULES:
- #  - segmentation
-    - tokenizer
+   - segmentation
+ #  - tokenizer
  #   - custom_text_modifier
 
   # === Tokenizer Settings ===
@@ -28,8 +28,8 @@ PROCESSING_PIPELINE:
       LANGUAGE: "en"  # Language code for Stanza tokenizer (e.g., "en", "es")
       PROCESSORS: "tokenize"  # Processors to use, comma-separated (e.g., "tokenize,pos,lemma")
       TOKENIZE_NO_SSPLIT: false  # Set to true to disable sentence splitting
-      USE_GPU: true  # Whether to use GPU for processing
-      VERBOSE: true  # Whether to output verbose logs
+      USE_GPU: false  # Whether to use GPU for processing
+      VERBOSE: false  # Whether to output verbose logs
 
   # === Custom Text Modifier Settings ===
   CUSTOM_TEXT_MODIFIER:
@@ -52,7 +52,12 @@ TTS_MODELS:
   # Azure TTS Configuration
   AZURE_TTS:
     TTS_SPEED: "0%"  # Can be percentage or numerical value; e.g., "0%", "50%", "-20%"
-    TTS_VOICE: "en-US-KaiNeural"  # Replace with your desired Azure voice
+    TTS_VOICE: "en-US-AnaNeural"  # Replace with your desired Azure voice
+                                  # en-US-KaiNeural
+                                  # en-US-Brian:DragonHDLatestNeural
+                                  # en-US-Andrew2:DragonHDLatestNeural
+                                  # en-US-AmberNeural ....(child)
+                                  # en-US-AnaNeural ....(child)
     SPEECH_SYNTHESIS_RATE: "0%"  # Percentage or numerical value
     AUDIO_FORMAT: "Raw24Khz16BitMonoPcm"  # Mapping playback and format below
     AUDIO_FORMAT_RATES:
@@ -105,5 +110,5 @@ AUDIO_PLAYBACK_CONFIG:
   RATE: null  # Dynamically set at runtime based on TTS_PROVIDER
 
 LOGGING:
-  ENABLED: true
+  ENABLED: false
   LEVEL: "DEBUG"  # "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"
