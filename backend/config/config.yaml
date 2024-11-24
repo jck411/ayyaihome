@@ -117,6 +117,4 @@ AUDIO_PLAYBACK_CONFIG:
   CHANNELS: 1  # 1 (mono), 2 (stereo)
   RATE: null  # Dynamically set at runtime based on TTS_PROVIDER
 
-LOGGING:
-  ENABLED: true
-  LEVEL: "DEBUG"  # "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"
+
