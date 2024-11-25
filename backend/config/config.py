@@ -1,3 +1,5 @@
+#/home/jack/ayyaihome/backend/config/config.py
+
 import os
 import yaml
 from dotenv import load_dotenv
@@ -61,9 +63,6 @@ class Config:
 
     # Delimiters used to split text into phrases.
     DELIMITERS: List[str] = PROCESSING_PIPELINE.get('DELIMITERS', [". ", "? ", "! "])
-
-    # Minimum length of text before attempting to find a delimiter for segmentation.
-    MINIMUM_PHRASE_LENGTH: int = PROCESSING_PIPELINE.get('MINIMUM_PHRASE_LENGTH', 25)
 
     # Tokenizer settings
     TOKENIZER_TYPE: str = PROCESSING_PIPELINE.get('TOKENIZER', {}).get('TYPE', 'none')

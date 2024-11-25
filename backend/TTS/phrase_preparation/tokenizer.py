@@ -1,20 +1,18 @@
 import asyncio
-from backend.config import Config
-
-import asyncio
 from backend.config import Config  # Adjust the import based on your project structure
+import nltk
+
+# Ensure the necessary NLTK data is downloaded
+nltk.download('punkt', quiet=True)
 
 async def tokenize_text(text: str) -> str:
     tokenizer_type = Config.TOKENIZER_TYPE
 
     if tokenizer_type == 'nltk':
-        import nltk
         language = Config.NLTK_LANGUAGE
         tokenizer_name = Config.NLTK_TOKENIZER
 
         if tokenizer_name == 'word_tokenize':
-            # Download necessary NLTK data
-            nltk.download('punkt', quiet=True)
             preserve_line = Config.NLTK_PRESERVE_LINE
             tokens = nltk.word_tokenize(text, language=language, preserve_line=preserve_line)
         elif tokenizer_name == 'TreebankWordTokenizer':
@@ -54,4 +52,3 @@ async def tokenize_text(text: str) -> str:
         return text
     else:
         raise ValueError(f"Unknown tokenizer type: {tokenizer_type}")
-

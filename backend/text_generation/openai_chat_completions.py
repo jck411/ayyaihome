@@ -1,31 +1,33 @@
-# /home/jack/ayyaihome/backend/text_generation/openai_chat_completions.py
+# backend/text_generation/openai_chat_completions.py
 
 import asyncio
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, AsyncIterator
 from openai import AsyncOpenAI
 from fastapi import HTTPException
 from backend.config import Config, get_openai_client
-from backend.TTS.phrase_preparation.processing_pipeline import process_pipeline
-from backend.TTS.phrase_preparation.phrase_segmentation import segment_text
+from backend.phrase_accumulator import PhraseAccumulator
+from backend.text_generation.stream_handler import handle_streaming, extract_content_from_openai_chunk
 
 async def stream_completion(
     messages: List[Dict[str, str]],
     phrase_queue: asyncio.Queue,
     openai_client: Optional[AsyncOpenAI] = None
-):
+) -> AsyncIterator[str]:
     """
-    Streams the completion from OpenAI and processes the text through the pipeline.
+    Streams OpenAI chat completions to the frontend and processes phrases.
 
     Args:
-        messages (List[Dict[str, str]]): The list of message dicts with 'role' and 'content' keys.
-        phrase_queue (asyncio.Queue): The queue to hold phrases for processing.
-        openai_client (Optional[AsyncOpenAI]): Optional OpenAI client instance.
+        messages (List[Dict[str, str]]): The chat messages.
+        phrase_queue (asyncio.Queue): The queue to dispatch processed phrases.
+        openai_client (Optional[AsyncOpenAI]): The OpenAI client.
+
+    Yields:
+        AsyncIterator[str]: The streamed content strings.
     """
     openai_client = openai_client or get_openai_client()
-    working_string = ""
+    accumulator = PhraseAccumulator(Config, phrase_queue)
 
     try:
-        # Use model from Config.RESPONSE_MODEL, which loads from config.yaml
         response = await openai_client.chat.completions.create(
             model=Config.RESPONSE_MODEL,
             messages=messages,
@@ -35,32 +37,13 @@ async def stream_completion(
             stream_options={"include_usage": True},
         )
 
-        async for chunk in response:
-            if chunk.choices and hasattr(chunk.choices[0].delta, 'content'):
-                content = chunk.choices[0].delta.content or ""
-
-                if content:
-                    yield content  # Stream to front end immediately
-
-                    # Accumulate content
-                    working_string += content
-
-                    # Attempt to segment and dispatch phrases
-                    if Config.USE_PHRASE_SEGMENTATION:
-                        working_string, phrases = await segment_text(working_string, Config)
-                        for phrase in phrases:
-                            # Process each phrase through the pipeline
-                            processed_phrase = await process_pipeline(phrase)
-                            # Dispatch to phrase queue
-                            await phrase_queue.put(processed_phrase)
-
-        # After streaming is complete, process any remaining content
-        if working_string.strip():
-            processed_text = await process_pipeline(working_string.strip())
-            await phrase_queue.put(processed_text)
-
-        # Signal that processing is complete
-        await phrase_queue.put(None)
+        async for content in handle_streaming(
+            response,
+            accumulator,
+            content_extractor=extract_content_from_openai_chunk,
+            api_name="OpenAI"
+        ):
+            yield content
 
     except Exception as e:
         await phrase_queue.put(None)

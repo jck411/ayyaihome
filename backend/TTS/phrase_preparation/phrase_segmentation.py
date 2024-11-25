@@ -1,36 +1,34 @@
-# /home/jack/ayyaihome/backend/TTS/phrase_preparation/phrase_segmentation.py
+# backend/TTS/phrase_preparation/phrase_segmentation.py
 
-import asyncio
-from typing import List, Tuple
+import re
+from typing import Tuple, List
 from backend.config import Config
 
-async def segment_text(
-    working_string: str,
-    config: Config
-) -> Tuple[str, List[str]]:
+async def segment_text(text: str, config: Config) -> Tuple[str, List[str]]:
     """
-    Segments the content based on configuration.
+    Segments the text based on delimiters.
 
     Args:
-        working_string (str): The accumulated content.
-        config (Config): Configuration settings.
+        text (str): The text to segment.
+        config (Config): Configuration object.
 
     Returns:
-        Tuple[str, List[str]]: Remaining working_string after processing, and list of phrases.
+        Tuple[str, List[str]]: Remaining text and list of segmented phrases.
     """
+    delimiters = config.DELIMITERS
+    pattern = '|'.join(map(re.escape, delimiters))
+    segments = re.split(f'({pattern})', text)
+
     phrases = []
-    while len(working_string) >= config.MINIMUM_PHRASE_LENGTH:
-        delimiter_indices = [
-            idx for idx in (
-                working_string.find(d, config.MINIMUM_PHRASE_LENGTH) for d in config.DELIMITERS
-            ) if idx != -1
-        ]
-        if not delimiter_indices:
-            break
-        delimiter_index = min(delimiter_indices)
-        # Adjust the index to include the delimiter's length
-        delimiter_length = len(next((d for d in config.DELIMITERS if working_string.startswith(d, delimiter_index)), ''))
-        phrase = working_string[:delimiter_index + delimiter_length].strip()
-        working_string = working_string[delimiter_index + delimiter_length:]
-        phrases.append(phrase)
-    return working_string, phrases
+    current_phrase = ''
+
+    for segment in segments:
+        if segment in delimiters:
+            current_phrase += segment
+            phrases.append(current_phrase.strip())
+            current_phrase = ''
+        else:
+            current_phrase += segment
+
+    # At this point, any remaining text in current_phrase does not end with a delimiter
+    return current_phrase, phrases

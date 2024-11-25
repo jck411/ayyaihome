@@ -1,4 +1,4 @@
-# /path/to/your/project/stream_processing.py
+# backend/stream_processing.py
 
 import asyncio
 import queue

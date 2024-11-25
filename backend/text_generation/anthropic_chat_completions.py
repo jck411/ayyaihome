@@ -1,28 +1,31 @@
-# /home/jack/ayyaihome/backend/text_generation/anthropic_chat_completions.py
+# backend/text_generation/anthropic_chat_completions.py
 
 import asyncio
+from typing import List, Any, Optional, AsyncIterator
 from anthropic import AsyncAnthropic
 from fastapi import HTTPException
 from backend.config import Config, get_anthropic_client
-from backend.TTS.phrase_preparation.processing_pipeline import process_pipeline
-from backend.TTS.phrase_preparation.phrase_segmentation import segment_text
+from backend.phrase_accumulator import PhraseAccumulator
+from backend.text_generation.stream_handler import handle_streaming, extract_content_from_anthropic_chunk
 
 async def stream_anthropic_completion(
-    messages: list,
+    messages: List[Any],
     phrase_queue: asyncio.Queue,
-    client: AsyncAnthropic = None
-):
+    client: Optional[AsyncAnthropic] = None
+) -> AsyncIterator[str]:
     """
-    Streams responses from the Anthropic API and processes the text through the pipeline.
+    Streams Anthropic chat completions to the frontend and processes phrases.
 
     Args:
-        messages (list): The list of message dicts with 'role' and 'content' keys.
-        phrase_queue (asyncio.Queue): The queue to hold phrases for processing.
-        client (AsyncAnthropic): Optional Anthropic client instance.
+        messages (List[Any]): The chat messages.
+        phrase_queue (asyncio.Queue): The queue to dispatch processed phrases.
+        client (Optional[AsyncAnthropic]): The Anthropic client.
+
+    Yields:
+        AsyncIterator[str]: The streamed content strings.
     """
-    # Use provided client or initialize default
     client = client or get_anthropic_client()
-    working_string = ""
+    accumulator = PhraseAccumulator(Config, phrase_queue)
 
     try:
         async with client.messages.stream(
@@ -34,31 +37,13 @@ async def stream_anthropic_completion(
             top_p=Config.ANTHROPIC_TOP_P,
             stop_sequences=Config.ANTHROPIC_STOP_SEQUENCES,
         ) as stream:
-            async for text_chunk in stream.text_stream:
-                content = text_chunk or ""
-
-                if content:
-                    yield content  # Stream to front end immediately
-
-                    # Accumulate content
-                    working_string += content
-
-                    # Attempt to segment and dispatch phrases
-                    if Config.USE_PHRASE_SEGMENTATION:
-                        working_string, phrases = await segment_text(working_string, Config)
-                        for phrase in phrases:
-                            # Process each phrase through the pipeline
-                            processed_phrase = await process_pipeline(phrase)
-                            # Dispatch to phrase queue
-                            await phrase_queue.put(processed_phrase)
-
-        # After streaming is complete, process any remaining content
-        if working_string.strip():
-            processed_text = await process_pipeline(working_string.strip())
-            await phrase_queue.put(processed_text)
-
-        # Signal that processing is complete
-        await phrase_queue.put(None)
+            async for content in handle_streaming(
+                stream.text_stream,
+                accumulator,
+                content_extractor=extract_content_from_anthropic_chunk,
+                api_name="Anthropic"
+            ):
+                yield content
 
     except Exception as e:
         await phrase_queue.put(None)

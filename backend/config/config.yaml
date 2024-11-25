@@ -2,16 +2,17 @@ GENERAL_TTS:
   TTS_PROVIDER: "azure"  # Possible values: "openai", "azure"
 
 PROCESSING_PIPELINE:
-  # === Segmentation Settings ===
-  USE_PHRASE_SEGMENTATION: false # (global setting) Set to false to turn off segmentation during streaming
-  DELIMITERS: [". ", "? ", "! "]  # Delimiters used for segmentation
-  MINIMUM_PHRASE_LENGTH: 25  # Minimum length before attempting segmentation
 
-  # === Modules to Include ===
+ # === Modules to Include ===
   MODULES:
    - segmentation
- #  - tokenizer
- #   - custom_text_modifier
+  # - tokenizer
+  # - custom_text_modifier  # Include this only if you want to enable custom text modification
+
+  # === Segmentation Settings ===
+  USE_PHRASE_SEGMENTATION: true # (global setting) Set to false to turn off segmentation during streaming
+  DELIMITERS: [". ", "? ", "! "]  # Delimiters used for segmentation
+  
 
   # === Tokenizer Settings ===
   TOKENIZER:
@@ -21,7 +22,7 @@ PROCESSING_PIPELINE:
     NLTK:
       LANGUAGE: "english"  # Language for NLTK tokenizer (e.g., "english", "spanish")
       TOKENIZER: "word_tokenize"  # Tokenizer to use: "word_tokenize", "TreebankWordTokenizer", "TweetTokenizer"
-      PRESERVE_LINE: false  # Whether to preserve line breaks (only applicable for "word_tokenize")
+      PRESERVE_LINE: true # Whether to preserve line breaks (only applicable for "word_tokenize")
 
     # --- Stanza Tokenizer Options ---
     STANZA:
@@ -52,7 +53,7 @@ TTS_MODELS:
   # Azure TTS Configuration
   AZURE_TTS:
     TTS_SPEED: "0%"  # Can be percentage or numerical value; e.g., "0%", "50%", "-20%"
-    TTS_VOICE: "en-US-AnaNeural"  # Replace with your desired Azure voice
+    TTS_VOICE: "en-US-KaiNeural"  # Replace with your desired Azure voice
                                   # en-US-KaiNeural
                                   # en-US-Brian:DragonHDLatestNeural
                                   # en-US-Andrew2:DragonHDLatestNeural
