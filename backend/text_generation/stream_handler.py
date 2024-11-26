@@ -1,9 +1,24 @@
-# backend/text_generation/stream_handler.py
-
 import asyncio
 from fastapi import HTTPException
 from typing import AsyncIterator, Any, Callable, Optional
 from backend.phrase_accumulator import PhraseAccumulator
+
+
+def extract_content_from_gemini_chunk(chunk: Any) -> Optional[str]:
+    """
+    Extracts the content string from Google's Gemini API streaming response.
+
+    Args:
+        chunk (Any): The chunk object from Gemini's streaming response.
+
+    Returns:
+        Optional[str]: The extracted content string or None if not available.
+    """
+    try:
+        return chunk.text or None
+    except AttributeError:
+        return None
+
 
 def extract_content_from_openai_chunk(chunk: Any) -> Optional[str]:
     """

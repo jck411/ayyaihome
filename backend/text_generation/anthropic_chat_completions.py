@@ -1,12 +1,15 @@
-# backend/text_generation/anthropic_chat_completions.py
-
 import asyncio
+import logging
 from typing import List, Any, Optional, AsyncIterator
 from anthropic import AsyncAnthropic
 from fastapi import HTTPException
 from backend.config import Config, get_anthropic_client
 from backend.phrase_accumulator import PhraseAccumulator
 from backend.text_generation.stream_handler import handle_streaming, extract_content_from_anthropic_chunk
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 async def stream_anthropic_completion(
     messages: List[Any],
@@ -43,8 +46,13 @@ async def stream_anthropic_completion(
                 content_extractor=extract_content_from_anthropic_chunk,
                 api_name="Anthropic"
             ):
+                # Log the streamed content
+                logger.info(f"Streamed content: {content}")
+                print(f"Output content: {content}")  # Print each streamed content part for visibility
                 yield content
 
     except Exception as e:
+        # Log the exception
+        logger.error(f"Error calling Anthropic API: {e}")
         await phrase_queue.put(None)
         raise HTTPException(status_code=500, detail=f"Error calling Anthropic API: {e}")
