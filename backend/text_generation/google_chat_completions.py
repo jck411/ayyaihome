@@ -1,14 +1,13 @@
 import asyncio
 from typing import List, Dict, Any, AsyncIterator
-from fastapi import HTTPException
 import google.generativeai as genai
+from fastapi import HTTPException
+import logging
 
 from backend.config import Config
 from backend.config.clients import get_google_client
-
 from backend.phrase_accumulator import PhraseAccumulator
 from backend.text_generation.stream_handler import handle_streaming, extract_content_from_gemini_chunk
-import logging
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -22,7 +21,7 @@ async def stream_google_completion(
     Streams completion from Google's Gemini API and processes the text.
 
     Args:
-        messages (list[dict]): List of message dictionaries with `role` and `content` keys.
+        messages (list[dict]): List of message dictionaries with role and content keys.
         phrase_queue (asyncio.Queue): Queue to handle processed phrases.
 
     Yields:
@@ -31,20 +30,17 @@ async def stream_google_completion(
     logger.info("Starting stream_google_completion...")  # Log function start
 
     try:
-        # Get the API key from the centralized Config
-        api_key = Config.LLM_CONFIG.GEMINI_API_KEY
-        if not api_key:
-            logger.error("GEMINI_API_KEY is not set.")
-            raise HTTPException(status_code=500, detail="GEMINI_API_KEY is not set.")
+        # Initialize the Google client here
+        google_client = get_google_client()
 
-        # Configure the SDK with your API key
+        # Extract client properties from the injected dictionary
+        api_key = google_client["api_key"]
+        model_version = google_client["model_version"]
+
+        # Configure the SDK and initialize the model
         genai.configure(api_key=api_key)
-        logger.info("Google Gemini API configured with the provided API key.")
-
-        # Initialize the model using the version from Config
-        model_version = Config.LLM_CONFIG.GEMINI_MODEL_VERSION
         model = genai.GenerativeModel(model_version)
-        logger.info(f"Using Google Gemini model version: {model_version}")
+        logger.info(f"Google Gemini client initialized with model version: {model_version}")
 
         # Construct the system prompt and user input
         system_prompt = Config.LLM_CONFIG.GEMINI_SYSTEM_PROMPT
@@ -77,3 +73,23 @@ async def stream_google_completion(
         raise HTTPException(status_code=500, detail=f"Error calling Google's Gemini API: {e}")
     finally:
         logger.info("Finished stream_google_completion.")  # Log function end
+
+# Example usage (optional for testing purposes)
+async def main():
+    # Define your messages and phrase queue
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Can you summarize the benefits of client injection?"}
+    ]
+    phrase_queue = asyncio.Queue()
+
+    try:
+        # Call the stream_google_completion function
+        async for content in stream_google_completion(messages, phrase_queue):
+            print(content)
+    except Exception as e:
+        print(f"Error in streaming: {e}")
+
+# Run the async main function (optional for testing purposes)
+if __name__ == "__main__":
+    asyncio.run(main())
