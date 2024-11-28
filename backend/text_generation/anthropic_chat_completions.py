@@ -3,9 +3,14 @@ import logging
 from typing import List, Any, Optional, AsyncIterator
 from anthropic import AsyncAnthropic
 from fastapi import HTTPException
-from backend.config import Config, get_anthropic_client
+
+from backend.config import Config
+
+from backend.config.clients import get_anthropic_client
+
 from backend.phrase_accumulator import PhraseAccumulator
 from backend.text_generation.stream_handler import handle_streaming, extract_content_from_anthropic_chunk
+
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -47,8 +52,7 @@ async def stream_anthropic_completion(
                 api_name="Anthropic"
             ):
                 # Log the streamed content
-                logger.info(f"Streamed content: {content}")
-                print(f"Output content: {content}")  # Print each streamed content part for visibility
+                logger.info(f"Streamed content: {content}")  # Log content as INFO
                 yield content
 
     except Exception as e:

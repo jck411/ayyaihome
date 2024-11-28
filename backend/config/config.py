@@ -1,192 +1,88 @@
-#/home/jack/ayyaihome/backend/config/config.py
+from .llm_config import LLMConfig
+from .tts_config import TTSConfig
 
-import os
-import yaml
-from dotenv import load_dotenv
-from openai import AsyncOpenAI
-from anthropic import AsyncAnthropic
-import azure.cognitiveservices.speech as speechsdk
-from pathlib import Path
-from typing import Any, Dict, List, Optional
 
-# Load environment variables from a .env file
-load_dotenv()
-
-# Load configuration from YAML file
-CONFIG_PATH = Path(__file__).parent / "config.yaml"
-
-try:
-    with open(CONFIG_PATH, 'r') as config_file:
-        config_data = yaml.safe_load(config_file)
-except FileNotFoundError:
-    raise FileNotFoundError(f"Configuration file not found at {CONFIG_PATH}")
-except yaml.YAMLError as e:
-    raise ValueError(f"Error parsing YAML configuration: {e}")
-
-# Configuration parameters
 class Config:
     """
-    Configuration class to hold all settings for TTS and LLM models.
+    Centralized configuration access for LLM and TTS configurations.
+    Provides direct access to all critical attributes from LLMConfig and TTSConfig.
     """
+    LLM_CONFIG = LLMConfig.get_instance()
+    TTS_CONFIG = TTSConfig.get_instance()
 
-    # === Processing Pipeline Settings ===
-    PROCESSING_PIPELINE: Dict[str, Any] = config_data.get('PROCESSING_PIPELINE', {})
+    # Expose LLMConfig attributes
+    OPENAI_API_KEY = LLM_CONFIG.OPENAI_API_KEY
+    OPENAI_RESPONSE_MODEL = LLM_CONFIG.OPENAI_RESPONSE_MODEL
+    OPENAI_TEMPERATURE = LLM_CONFIG.OPENAI_TEMPERATURE
+    OPENAI_TOP_P = LLM_CONFIG.OPENAI_TOP_P
+    OPENAI_N = LLM_CONFIG.OPENAI_N
+    OPENAI_SYSTEM_PROMPT = LLM_CONFIG.OPENAI_SYSTEM_PROMPT
+    OPENAI_STREAM_OPTIONS = LLM_CONFIG.OPENAI_STREAM_OPTIONS
+    OPENAI_MAX_TOKENS = LLM_CONFIG.OPENAI_MAX_TOKENS
+    OPENAI_PRESENCE_PENALTY = LLM_CONFIG.OPENAI_PRESENCE_PENALTY
+    OPENAI_FREQUENCY_PENALTY = LLM_CONFIG.OPENAI_FREQUENCY_PENALTY
 
-    # List of modules to include in the processing pipeline.
-    # The modules are applied in the order they appear in the list.
-    MODULES: List[str] = PROCESSING_PIPELINE.get('MODULES', [])
+    ANTHROPIC_API_KEY = LLM_CONFIG.ANTHROPIC_API_KEY
+    ANTHROPIC_RESPONSE_MODEL = LLM_CONFIG.ANTHROPIC_RESPONSE_MODEL
+    ANTHROPIC_TEMPERATURE = LLM_CONFIG.ANTHROPIC_TEMPERATURE
+    ANTHROPIC_TOP_P = LLM_CONFIG.ANTHROPIC_TOP_P
+    ANTHROPIC_SYSTEM_PROMPT = LLM_CONFIG.ANTHROPIC_SYSTEM_PROMPT
+    ANTHROPIC_MAX_TOKENS = LLM_CONFIG.ANTHROPIC_MAX_TOKENS
+    ANTHROPIC_STREAM_OPTIONS = LLM_CONFIG.ANTHROPIC_STREAM_OPTIONS
+    ANTHROPIC_STOP_SEQUENCES = LLM_CONFIG.ANTHROPIC_STOP_SEQUENCES
 
-    # Tokenizer settings
-    TOKENIZER_TYPE: str = PROCESSING_PIPELINE.get('TOKENIZER', {}).get('TYPE', 'none')
+    GEMINI_API_KEY = LLM_CONFIG.GEMINI_API_KEY
+    GEMINI_MODEL_VERSION = LLM_CONFIG.GEMINI_MODEL_VERSION
+    GEMINI_TEMPERATURE = LLM_CONFIG.GEMINI_TEMPERATURE
+    GEMINI_SYSTEM_PROMPT = LLM_CONFIG.GEMINI_SYSTEM_PROMPT
+    GEMINI_MAX_OUTPUT_TOKENS = LLM_CONFIG.GEMINI_MAX_OUTPUT_TOKENS
+    GEMINI_TOP_P = LLM_CONFIG.GEMINI_TOP_P
+    GEMINI_CANDIDATE_COUNT = LLM_CONFIG.GEMINI_CANDIDATE_COUNT
 
-    if TOKENIZER_TYPE == 'nltk':
-        # Extract NLTK configurations
-        NLTK_CONFIG: Dict[str, Any] = PROCESSING_PIPELINE.get('TOKENIZER', {}).get('NLTK', {})
-        NLTK_LANGUAGE: str = NLTK_CONFIG.get('LANGUAGE')
-        NLTK_TOKENIZER: str = NLTK_CONFIG.get('TOKENIZER')
-        NLTK_PRESERVE_LINE: bool = NLTK_CONFIG.get('PRESERVE_LINE')
-    elif TOKENIZER_TYPE == 'stanza':
-        # Extract Stanza configurations
-        STANZA_CONFIG: Dict[str, Any] = PROCESSING_PIPELINE.get('TOKENIZER', {}).get('STANZA', {})
-        STANZA_LANGUAGE: str = STANZA_CONFIG.get('LANGUAGE')
-        STANZA_PROCESSORS: str = STANZA_CONFIG.get('PROCESSORS')
-        STANZA_TOKENIZE_NO_SSPLIT: bool = STANZA_CONFIG.get('TOKENIZE_NO_SSPLIT')
-        STANZA_USE_GPU: bool = STANZA_CONFIG.get('USE_GPU')
-        STANZA_VERBOSE: bool = STANZA_CONFIG.get('VERBOSE')
-    elif TOKENIZER_TYPE == 'none':
-        pass  # No tokenizer settings needed
-    else:
-        raise ValueError(f"Unsupported TOKENIZER_TYPE: {TOKENIZER_TYPE}")
+    # Expose TTSConfig attributes directly
+    TTS_PROVIDER = TTS_CONFIG.TTS_PROVIDER
+    MODULES = TTS_CONFIG.MODULES
+    USE_PHRASE_SEGMENTATION = TTS_CONFIG.USE_PHRASE_SEGMENTATION
+    DELIMITERS = TTS_CONFIG.DELIMITERS
+    TOKENIZER_TYPE = TTS_CONFIG.TOKENIZER_TYPE
+    NLTK_CONFIG = TTS_CONFIG.NLTK_CONFIG
+    STANZA_CONFIG = TTS_CONFIG.STANZA_CONFIG
+    CUSTOM_TEXT_MODIFIER_ENABLED = TTS_CONFIG.CUSTOM_TEXT_MODIFIER_ENABLED
 
-    # Segmentation settings
-    USE_PHRASE_SEGMENTATION: bool = PROCESSING_PIPELINE.get('USE_PHRASE_SEGMENTATION', True)
+    # OpenAI TTS Configurations
+    OPENAI_TTS_CHUNK_SIZE = TTS_CONFIG.OPENAI_TTS_CHUNK_SIZE
+    OPENAI_TTS_SPEED = TTS_CONFIG.OPENAI_TTS_SPEED
+    OPENAI_TTS_VOICE = TTS_CONFIG.OPENAI_TTS_VOICE
+    OPENAI_TTS_MODEL = TTS_CONFIG.OPENAI_TTS_MODEL
+    OPENAI_AUDIO_FORMAT = TTS_CONFIG.OPENAI_AUDIO_FORMAT
+    OPENAI_AUDIO_FORMAT_RATES = TTS_CONFIG.OPENAI_AUDIO_FORMAT_RATES
+    OPENAI_PLAYBACK_RATE = TTS_CONFIG.OPENAI_PLAYBACK_RATE
 
-    # Delimiters used to split text into phrases.
-    DELIMITERS: List[str] = PROCESSING_PIPELINE.get('DELIMITERS', [". ", "? ", "! "])
+    # OpenAI TTS Configurations
+    OPENAI_TTS_CHUNK_SIZE = TTS_CONFIG.OPENAI_TTS_CHUNK_SIZE
+    OPENAI_TTS_SPEED = TTS_CONFIG.OPENAI_TTS_SPEED
+    OPENAI_TTS_VOICE = TTS_CONFIG.OPENAI_TTS_VOICE
+    OPENAI_TTS_MODEL = TTS_CONFIG.OPENAI_TTS_MODEL
+    OPENAI_AUDIO_FORMAT = TTS_CONFIG.OPENAI_AUDIO_FORMAT
+    OPENAI_AUDIO_FORMAT_RATES = TTS_CONFIG.OPENAI_AUDIO_FORMAT_RATES
+    OPENAI_PLAYBACK_RATE = TTS_CONFIG.OPENAI_PLAYBACK_RATE
 
-    # Tokenizer settings
-    TOKENIZER_TYPE: str = PROCESSING_PIPELINE.get('TOKENIZER', {}).get('TYPE', 'none')
+    # Azure TTS Configurations
+    AZURE_TTS_SPEED = TTS_CONFIG.AZURE_TTS_SPEED
+    AZURE_TTS_VOICE = TTS_CONFIG.AZURE_TTS_VOICE
+    AZURE_AUDIO_FORMAT = TTS_CONFIG.AZURE_AUDIO_FORMAT
+    AZURE_AUDIO_FORMAT_RATES = TTS_CONFIG.AZURE_AUDIO_FORMAT_RATES
+    AZURE_PLAYBACK_RATE = TTS_CONFIG.AZURE_PLAYBACK_RATE
+    AZURE_ENABLE_PROFANITY_FILTER = TTS_CONFIG.AZURE_ENABLE_PROFANITY_FILTER
+    AZURE_STABILITY = TTS_CONFIG.AZURE_STABILITY
+    AZURE_PROSODY = TTS_CONFIG.AZURE_PROSODY
 
-    # Custom Text Modifier settings
-    CUSTOM_TEXT_MODIFIER_ENABLED: bool = PROCESSING_PIPELINE.get('CUSTOM_TEXT_MODIFIER', {}).get('ENABLED', False)
+    # Expose Azure API Keys and Region
+    AZURE_SPEECH_KEY = TTS_CONFIG.AZURE_SPEECH_KEY
+    AZURE_SPEECH_REGION = TTS_CONFIG.AZURE_SPEECH_REGION
 
-    # === GENERAL_TTS ===
-    GENERAL_TTS: Dict[str, Any] = config_data.get('GENERAL_TTS', {})
-    TTS_PROVIDER: str = GENERAL_TTS.get('TTS_PROVIDER', "azure")
 
-    # === TTS_MODELS ===
-    TTS_MODELS: Dict[str, Any] = config_data.get('TTS_MODELS', {})
-
-    # TTS_MODELS - OpenAI
-    OPENAI_TTS_CONFIG: Dict[str, Any] = TTS_MODELS.get('OPENAI_TTS', {})
-    OPENAI_TTS_SPEED: float = OPENAI_TTS_CONFIG.get('TTS_SPEED', 1.0)
-    OPENAI_TTS_VOICE: str = OPENAI_TTS_CONFIG.get('TTS_VOICE', "onyx")
-    OPENAI_TTS_MODEL: str = OPENAI_TTS_CONFIG.get('TTS_MODEL', "tts-1")
-    OPENAI_AUDIO_RESPONSE_FORMAT: str = OPENAI_TTS_CONFIG.get('AUDIO_RESPONSE_FORMAT', "pcm")
-    OPENAI_PLAYBACK_RATE: int = OPENAI_TTS_CONFIG.get('PLAYBACK_RATE', 24000)
-    OPENAI_TTS_CHUNK_SIZE: int = OPENAI_TTS_CONFIG.get('TTS_CHUNK_SIZE', 1024)
-    OPENAI_AUDIO_FORMAT_RATES: Dict[str, int] = OPENAI_TTS_CONFIG.get('AUDIO_FORMAT_RATES', {})
-
-    # TTS_MODELS - Azure
-    AZURE_TTS_CONFIG: Dict[str, Any] = TTS_MODELS.get('AZURE_TTS', {})
-    AZURE_TTS_SPEED: str = AZURE_TTS_CONFIG.get('TTS_SPEED')  # Mandatory
-    AZURE_TTS_VOICE: str = AZURE_TTS_CONFIG.get('TTS_VOICE')  # Mandatory
-    AZURE_AUDIO_FORMAT: str = AZURE_TTS_CONFIG.get('AUDIO_FORMAT')  # Mandatory
-    AZURE_PLAYBACK_RATE: int = AZURE_TTS_CONFIG.get('PLAYBACK_RATE')  # Mandatory
-    AZURE_AUDIO_FORMAT_RATES: Dict[str, int] = AZURE_TTS_CONFIG.get('AUDIO_FORMAT_RATES', {})
-
-    # === LLM_MODEL_CONFIG - OpenAI ===
-    LLM_CONFIG: Dict[str, Any] = config_data.get('LLM_MODEL_CONFIG', {}).get('OPENAI', {})
-    RESPONSE_MODEL: str = LLM_CONFIG.get('RESPONSE_MODEL', "gpt-4o-mini")
-    TEMPERATURE: float = LLM_CONFIG.get('TEMPERATURE', 1.0)
-    TOP_P: float = LLM_CONFIG.get('TOP_P', 1.0)
-    N: int = LLM_CONFIG.get('N', 1)
-    SYSTEM_PROMPT_CONTENT: str = LLM_CONFIG.get('SYSTEM_PROMPT_CONTENT', "You are a helpful but witty and dry assistant")
-    STREAM_OPTIONS: Dict[str, Any] = LLM_CONFIG.get('STREAM_OPTIONS', {"include_usage": True})
-    STOP: Optional[Any] = LLM_CONFIG.get('STOP', None)
-    MAX_TOKENS: Optional[int] = LLM_CONFIG.get('MAX_TOKENS', None)
-    PRESENCE_PENALTY: float = LLM_CONFIG.get('PRESENCE_PENALTY', 0.0)
-    FREQUENCY_PENALTY: float = LLM_CONFIG.get('FREQUENCY_PENALTY', 0.0)
-    LOGIT_BIAS: Optional[Any] = LLM_CONFIG.get('LOGIT_BIAS', None)
-    USER: Optional[Any] = LLM_CONFIG.get('USER', None)
-    TOOLS: Optional[Any] = LLM_CONFIG.get('TOOLS', None)
-    TOOL_CHOICE: Optional[Any] = LLM_CONFIG.get('TOOL_CHOICE', None)
-    MODALITIES: List[str] = LLM_CONFIG.get('MODALITIES', ["text"])
-
-    # === LLM_MODEL_CONFIG - Anthropic ===
-    ANTHROPIC_CONFIG: Dict[str, Any] = config_data.get('LLM_MODEL_CONFIG', {}).get('ANTHROPIC', {})
-    ANTHROPIC_RESPONSE_MODEL: str = ANTHROPIC_CONFIG.get('RESPONSE_MODEL', "claude-3-haiku-20240307")
-    ANTHROPIC_TEMPERATURE: float = ANTHROPIC_CONFIG.get('TEMPERATURE', 0.7)
-    ANTHROPIC_TOP_P: float = ANTHROPIC_CONFIG.get('TOP_P', 0.9)
-    ANTHROPIC_SYSTEM_PROMPT: str = ANTHROPIC_CONFIG.get('SYSTEM_PROMPT', "you rhyme all of your replies")
-    ANTHROPIC_MAX_TOKENS: int = ANTHROPIC_CONFIG.get('MAX_TOKENS', 1024)
-    ANTHROPIC_STOP_SEQUENCES: Optional[Any] = ANTHROPIC_CONFIG.get('STOP_SEQUENCES', None)
-    ANTHROPIC_STREAM_OPTIONS: Dict[str, Any] = ANTHROPIC_CONFIG.get('STREAM_OPTIONS', {"include_usage": True})
-
-    # === AUDIO_PLAYBACK_CONFIG ===
-    AUDIO_PLAYBACK_CONFIG: Dict[str, Any] = config_data.get('AUDIO_PLAYBACK_CONFIG', {})
-    AUDIO_FORMAT: int = AUDIO_PLAYBACK_CONFIG.get('FORMAT', 16)
-    CHANNELS: int = AUDIO_PLAYBACK_CONFIG.get('CHANNELS', 1)
-    DEFAULT_RATE: Optional[int] = AUDIO_PLAYBACK_CONFIG.get('RATE', 24000)  # Default if no provider-specific rate
-
-    # Azure Credentials from .env
-    AZURE_SPEECH_KEY: Optional[str] = os.getenv("AZURE_SPEECH_KEY")
-    AZURE_SERVICE_REGION: Optional[str] = os.getenv("AZURE_SERVICE_REGION")
-
-    # OpenAI Credentials from .env or config.yaml
-    OPENAI_API_KEY: Optional[str] = config_data.get('OPENAI_API_KEY') or os.getenv("OPENAI_API_KEY")
-
-    # Anthropic Credentials from .env or config.yaml
-    ANTHROPIC_API_KEY: Optional[str] = config_data.get('ANTHROPIC_API_KEY') or os.getenv("ANTHROPIC_API_KEY")
-
-    @staticmethod
-    def get_playback_rate() -> int:
-        if Config.TTS_PROVIDER.lower() == "openai":
-            audio_format = Config.OPENAI_AUDIO_RESPONSE_FORMAT
-            format_rates = Config.OPENAI_AUDIO_FORMAT_RATES
-        elif Config.TTS_PROVIDER.lower() == "azure":
-            audio_format = Config.AZURE_AUDIO_FORMAT
-            format_rates = Config.AZURE_AUDIO_FORMAT_RATES
-        else:
-            raise ValueError(f"Unsupported TTS_PROVIDER: {Config.TTS_PROVIDER}")
-        
-        # Fetch the rate dynamically based on the chosen audio format
-        playback_rate = format_rates.get(audio_format)
-        if playback_rate is None:
-            raise ValueError(f"Unsupported AUDIO_FORMAT: {audio_format}. Please specify a valid audio format.")
-        
-        return playback_rate
-
-# Initialize the OpenAI API client using dependency injection
-def get_openai_client() -> AsyncOpenAI:
-    api_key = Config.OPENAI_API_KEY
-    if not api_key:
-        raise ValueError("OpenAI API key is not set.")
-    return AsyncOpenAI(api_key=api_key)
-
-# Initialize the Anthropic API client using dependency injection
-def get_anthropic_client() -> AsyncAnthropic:
-    api_key = Config.ANTHROPIC_API_KEY
-    if not api_key:
-        raise ValueError("Anthropic API key is not set.")
-    return AsyncAnthropic(api_key=api_key)
-
-# Initialize the Azure Speech SDK configuration
-def get_azure_speech_config() -> speechsdk.SpeechConfig:
-    subscription_key = Config.AZURE_SPEECH_KEY
-    region = Config.AZURE_SERVICE_REGION
-    if not subscription_key or not region:
-        raise ValueError("Azure Speech credentials are not set.")
-    speech_config = speechsdk.SpeechConfig(subscription=subscription_key, region=region)
-    speech_config.speech_synthesis_voice_name = Config.AZURE_TTS_VOICE
-    speech_config.speech_synthesis_rate = Config.AZURE_TTS_SPEED
-
-    # Set output format
-    try:
-        speech_config.set_speech_synthesis_output_format(
-            getattr(speechsdk.SpeechSynthesisOutputFormat, Config.AZURE_AUDIO_FORMAT)
-        )
-    except AttributeError:
-        raise ValueError(f"Invalid OUTPUT_FORMAT: {Config.AZURE_AUDIO_FORMAT}")
-
-    return speech_config
+    # Audio Playback Configuration
+    AUDIO_FORMAT = TTS_CONFIG.AUDIO_FORMAT
+    AUDIO_CHANNELS = TTS_CONFIG.AUDIO_CHANNELS
+    AUDIO_RATE = TTS_CONFIG.AUDIO_RATE

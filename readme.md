@@ -26,3 +26,6 @@ export PYTHONPATH=$(pwd)
 export PYTHONPATH=/home/jack/ayyaihome
 python /home/jack/ayyaihome/backend/main.py
 
+
+from backend.config import *
+
