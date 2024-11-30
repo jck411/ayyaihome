@@ -13,9 +13,6 @@ from backend.endpoints import router  # Import the router
 # Step 1: Load environment variables from a .env file
 load_dotenv()
 
-print(os.getenv("AZURE_SPEECH_KEY"))  # Test if the key is loaded
-print(os.getenv("AZURE_SPEECH_REGION"))  #
-
 # Step 2: Initialize PyAudio for audio playback
 try:
     pyaudio_instance = pyaudio.PyAudio()

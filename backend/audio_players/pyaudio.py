@@ -1,44 +1,62 @@
-import time
-import queue
-import threading
+import asyncio
 import pyaudio
+import logging
 
-# Initialize PyAudio for audio playback
-pyaudio_instance = pyaudio.PyAudio()
+# Set up logging
+logging.basicConfig(level=logging.CRITICAL)
+logger = logging.getLogger(__name__)
 
-def audio_player(audio_queue: queue.Queue, playback_rate: int):
+def audio_player_sync(audio_queue: asyncio.Queue, playback_rate: int, loop: asyncio.AbstractEventLoop):
     """
-    Plays audio data from the audio queue using PyAudio with the specified playback rate.
+    Synchronous audio player that reads from an asyncio queue.
     """
+    pyaudio_instance = pyaudio.PyAudio()
     stream = None
     try:
-        # Open PyAudio stream with dynamic playback rate
+        # Initialize PyAudio stream
         stream = pyaudio_instance.open(
             format=pyaudio.paInt16,  # 16-bit PCM
-            channels=1,             # Mono audio
-            rate=playback_rate,     # Dynamically set playback rate
+            channels=1,              # Mono audio
+            rate=playback_rate,      # Playback rate
             output=True
         )
+        logger.info(f"Audio player started with playback rate: {playback_rate} Hz")
 
         while True:
-            audio_data = audio_queue.get()
-            if audio_data is None:
+            # Fetch audio data from the queue using the provided event loop
+            future = asyncio.run_coroutine_threadsafe(
+                audio_queue.get(), loop
+            )
+            try:
+                audio_data = future.result()
+            except Exception as e:
+                logger.error(f"Error fetching audio data: {e}")
                 break
 
-            stream.write(audio_data)  # Play the audio chunk
-    except Exception:
-        pass  
+            if audio_data is None:
+                logger.info("Received termination signal. Stopping audio playback.")
+                break  # Exit when None is received
+
+            try:
+                stream.write(audio_data)  # Play the audio chunk
+                logger.debug("Played an audio chunk.")
+            except Exception as e:
+                logger.error(f"Error writing to stream: {e}")
+                break
+    except Exception as e:
+        logger.error(f"Error in audio_player_sync: {e}")
     finally:
         if stream:
             stream.stop_stream()
             stream.close()
+            logger.info("Audio stream closed.")
+        pyaudio_instance.terminate()
+        logger.info("PyAudio instance terminated.")
 
-def start_audio_player(audio_queue: queue.Queue, playback_rate: int):
+async def start_audio_player_async(audio_queue: asyncio.Queue, playback_rate: int, loop: asyncio.AbstractEventLoop):
     """
-    Starts the audio player in a separate thread with the specified playback rate.
+    Asynchronous wrapper for the synchronous PyAudio player.
     """
-    threading.Thread(
-        target=audio_player,
-        args=(audio_queue, playback_rate),
-        daemon=True
-    ).start()
+    logger.info("Starting asynchronous audio player.")
+    await asyncio.to_thread(audio_player_sync, audio_queue, playback_rate, loop)
+    logger.info("Asynchronous audio player has stopped.")

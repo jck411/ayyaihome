@@ -3,38 +3,9 @@ GENERAL_TTS:
 
 PROCESSING_PIPELINE:
 
- # === Modules to Include ===
-  MODULES:
-   - segmentation
-  # - tokenizer
-  # - custom_text_modifier  # Include this only if you want to enable custom text modification
-
-  # === Segmentation Settings ===
-  USE_PHRASE_SEGMENTATION: true # (global setting) Set to false to turn off segmentation during streaming
-  DELIMITERS: [". ", "? ", "! "]  # Delimiters used for segmentation
-  
-
-  # === Tokenizer Settings ===
-  TOKENIZER:
-    TYPE: "stanza"  # Options: "nltk", "stanza", "none"
-
-    # --- NLTK Tokenizer Options ---
-    NLTK:
-      LANGUAGE: "english"  # Language for NLTK tokenizer (e.g., "english", "spanish")
-      TOKENIZER: "word_tokenize"  # Tokenizer to use: "word_tokenize", "TreebankWordTokenizer", "TweetTokenizer"
-      PRESERVE_LINE: true # Whether to preserve line breaks (only applicable for "word_tokenize")
-
-    # --- Stanza Tokenizer Options ---
-    STANZA:
-      LANGUAGE: "en"  # Language code for Stanza tokenizer (e.g., "en", "es")
-      PROCESSORS: "tokenize"  # Processors to use, comma-separated (e.g., "tokenize,pos,lemma")
-      TOKENIZE_NO_SSPLIT: false  # Set to true to disable sentence splitting
-      USE_GPU: false  # Whether to use GPU for processing
-      VERBOSE: false  # Whether to output verbose logs
-
-  # === Custom Text Modifier Settings ===
-  CUSTOM_TEXT_MODIFIER:
-    ENABLED: false  # Set to true to enable custom text modification
+  USE_SEGMENTATION: false # (global setting) Set to false to turn off segmentation during streaming
+  DELIMITERS: ["\n"]  # Delimiters used for segmentation, eg., ". ", "? ", "! "
+  NLP_MODULE: "none"  # Specify the NLP module, e.g., "nltk", "stanza", "spacy", "none"
 
 TTS_MODELS:
   # OpenAI TTS Configuration

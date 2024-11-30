@@ -1,5 +1,4 @@
 import asyncio
-import queue
 import logging
 import azure.cognitiveservices.speech as speechsdk
 from backend.config.clients import get_azure_speech_config
@@ -9,16 +8,19 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 class PushAudioOutputStreamCallback(speechsdk.audio.PushAudioOutputStreamCallback):
-    def __init__(self, audio_queue: queue.Queue):
+    def __init__(self, audio_queue: asyncio.Queue):
         super().__init__()
         self.audio_queue = audio_queue
+        self.loop = asyncio.get_event_loop()
 
     def write(self, data: memoryview) -> int:
-        self.audio_queue.put(data.tobytes())
+        # Schedule the put_nowait call in the event loop
+        self.loop.call_soon_threadsafe(self.audio_queue.put_nowait, data.tobytes())
         return len(data)
 
     def close(self):
-        self.audio_queue.put(None)
+        # Schedule the put_nowait call in the event loop
+        self.loop.call_soon_threadsafe(self.audio_queue.put_nowait, None)
 
 def create_ssml(phrase: str, voice: str, prosody: dict) -> str:
     return f"""
@@ -31,7 +33,7 @@ def create_ssml(phrase: str, voice: str, prosody: dict) -> str:
 </speak>
 """
 
-async def azure_text_to_speech_processor(phrase_queue: asyncio.Queue, audio_queue: queue.Queue):
+async def azure_text_to_speech_processor(phrase_queue: asyncio.Queue, audio_queue: asyncio.Queue):
     try:
         # Fetch Azure configuration
         logger.debug(f"Fetching Azure SpeechConfig...")
@@ -47,7 +49,7 @@ async def azure_text_to_speech_processor(phrase_queue: asyncio.Queue, audio_queu
             phrase = await phrase_queue.get()
             if phrase is None:
                 logger.info("Terminating Azure TTS processing.")
-                audio_queue.put(None)
+                await audio_queue.put(None)
                 return
 
             try:
@@ -64,7 +66,7 @@ async def azure_text_to_speech_processor(phrase_queue: asyncio.Queue, audio_queu
                 await asyncio.get_event_loop().run_in_executor(None, result_future.get)
             except Exception as e:
                 logger.error(f"Error during Azure TTS processing: {e}")
-                audio_queue.put(None)
+                await audio_queue.put(None)
     except Exception as e:
         logger.error(f"Unexpected error in Azure TTS processor: {e}")
-        audio_queue.put(None)
+        await audio_queue.put(None)

@@ -26,17 +26,10 @@ class TTSConfig:
 
         # Processing Pipeline Settings
         pipeline = config_data.get('PROCESSING_PIPELINE', {})
-        self.MODULES = pipeline.get('MODULES', [])
-        self.USE_PHRASE_SEGMENTATION = pipeline.get('USE_PHRASE_SEGMENTATION', True)
-        self.DELIMITERS = pipeline.get('DELIMITERS', [". ", "? ", "! "])
+        self.USE_SEGMENTATION = pipeline.get('USE_SEGMENTATION')
+        self.DELIMITERS = pipeline.get('DELIMITERS')
+        self.NLP_MODULE = pipeline.get('NLP_MODULE')
 
-        tokenizer = pipeline.get('TOKENIZER', {})
-        self.TOKENIZER_TYPE = tokenizer.get('TYPE', 'none')
-        self.NLTK_CONFIG = tokenizer.get('NLTK', {})
-        self.STANZA_CONFIG = tokenizer.get('STANZA', {})
-
-        custom_text_modifier = pipeline.get('CUSTOM_TEXT_MODIFIER', {})
-        self.CUSTOM_TEXT_MODIFIER_ENABLED = custom_text_modifier.get('ENABLED', False)
 
         # TTS Models
         tts_models = config_data.get('TTS_MODELS', {})
@@ -45,7 +38,7 @@ class TTSConfig:
         self.AZURE_SPEECH_KEY = os.getenv("AZURE_SPEECH_KEY")
         self.AZURE_SPEECH_REGION = os.getenv("AZURE_SPEECH_REGION")
 
-        # OpenAI TTS
+        # OpenAI TTS Configuration
         openai_tts = tts_models.get('OPENAI_TTS', {})
         self.OPENAI_TTS_CHUNK_SIZE = openai_tts.get('TTS_CHUNK_SIZE', 1024)
         self.OPENAI_TTS_SPEED = openai_tts.get('TTS_SPEED', 1.0)
@@ -55,7 +48,7 @@ class TTSConfig:
         self.OPENAI_AUDIO_FORMAT_RATES = openai_tts.get('AUDIO_FORMAT_RATES', {})
         self.OPENAI_PLAYBACK_RATE = openai_tts.get('PLAYBACK_RATE', 24000)
 
-        # Azure TTS
+        # Azure TTS Configuration
         azure_tts = tts_models.get('AZURE_TTS', {})
         self.AZURE_TTS_SPEED = azure_tts.get('TTS_SPEED', '0%')
         self.AZURE_TTS_VOICE = azure_tts.get('TTS_VOICE', 'en-US-KaiNeural')

@@ -1,22 +1,19 @@
 import asyncio
-import queue
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import StreamingResponse
 import logging
 
 from backend.config import Config
-
 from backend.text_generation.openai_chat_completions import stream_completion
 from backend.text_generation.anthropic_chat_completions import stream_anthropic_completion
 from backend.text_generation.google_chat_completions import stream_google_completion
-#from backend.text_generation.mistral_chat_completions import stream_mistral_completion
-
+# from backend.text_generation.mistral_chat_completions import stream_mistral_completion
 from backend.stream_processing import process_streams
 from backend.utils.request_utils import (
     validate_and_prepare_for_anthropic,
     validate_and_prepare_for_openai_completion,
     validate_and_prepare_for_google_completion,
-    #validate_and_prepare_for_mistral_completion,
+    # validate_and_prepare_for_mistral_completion,
 )
 
 logger = logging.getLogger(__name__)
@@ -34,9 +31,9 @@ async def chat_with_anthropic(request: Request):
         # Validate and prepare request
         user_messages = await validate_and_prepare_for_anthropic(request)
 
-        # Initialize queues
+        # Initialize asynchronous queues
         phrase_queue = asyncio.Queue()
-        audio_queue = queue.Queue()
+        audio_queue = asyncio.Queue()
 
         # Start the process_streams task to handle real-time streaming
         asyncio.create_task(
@@ -69,9 +66,9 @@ async def openai_stream(request: Request):
         # Use the validation function
         messages = await validate_and_prepare_for_openai_completion(request)
 
-        # Initialize queues
+        # Initialize asynchronous queues
         phrase_queue = asyncio.Queue()
-        audio_queue = queue.Queue()
+        audio_queue = asyncio.Queue()
 
         # Start the process_streams task to handle real-time streaming
         asyncio.create_task(
@@ -104,9 +101,9 @@ async def google_stream(request: Request):
         # Validate and prepare the request
         messages = await validate_and_prepare_for_google_completion(request)
 
-        # Initialize queues for streaming
+        # Initialize asynchronous queues
         phrase_queue = asyncio.Queue()
-        audio_queue = queue.Queue()  # Added audio_queue here to match the pattern used for Anthropic and OpenAI
+        audio_queue = asyncio.Queue()
 
         # Start the process_streams task to handle real-time streaming
         asyncio.create_task(
@@ -138,9 +135,9 @@ async def google_stream(request: Request):
 #         # Validate and prepare the request
 #         messages = await validate_and_prepare_for_mistral_completion(request)
 #
-#         # Initialize queues for streaming
+#         # Initialize asynchronous queues
 #         phrase_queue = asyncio.Queue()
-#         audio_queue = queue.Queue()
+#         audio_queue = asyncio.Queue()
 #
 #         # Start the process_streams task to handle real-time streaming
 #         asyncio.create_task(
