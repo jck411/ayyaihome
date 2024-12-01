@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 from typing import List, Dict, Union, Optional, AsyncIterator, Sequence, Any
 
 from anthropic import AsyncAnthropic
@@ -11,49 +12,53 @@ from backend.text_generation.stream_handler import extract_content_from_anthropi
 
 logger = logging.getLogger(__name__)
 
-def find_earliest_delimiter(working_string: str, delimiters: List[str]) -> Optional[int]:
+def compile_delimiter_pattern(delimiters: List[str]) -> Optional[re.Pattern]:
     """
-    Find the earliest occurrence of any delimiter in the string.
-    
+    Pre-compile the delimiter regex pattern for efficiency.
+
     Args:
-        working_string: String to search for delimiters
-        delimiters: List of delimiter strings
-    
+        delimiters: List of delimiter strings.
+
     Returns:
-        Index of the earliest delimiter or None if no delimiter found
+        Compiled regex pattern or None if no delimiters provided.
     """
-    earliest_index = float('inf')
-    for delimiter in delimiters:
-        index = working_string.find(delimiter)
-        if index != -1:
-            earliest_index = min(earliest_index, index)
-    return earliest_index if earliest_index != float('inf') else None
+    if not delimiters:
+        return None
+    # Sort delimiters by length in descending order to match longer delimiters first
+    sorted_delimiters = sorted(delimiters, key=len, reverse=True)
+    pattern = '|'.join(map(re.escape, sorted_delimiters))
+    return re.compile(pattern)
 
 async def process_chunks(
     chunk_queue: asyncio.Queue,
     phrase_queue: asyncio.Queue,
-    delimiters: List[str]
+    delimiter_pattern: Optional[re.Pattern],
+    use_segmentation: bool,
+    character_max: int
 ):
     """
-    Process incoming chunks, extracting phrases based on specified delimiters.
-    
+    Process chunks from chunk_queue, extract phrases based on delimiters and segmentation settings,
+    and enqueue them into phrase_queue.
+
     Args:
-        chunk_queue: Queue of incoming text chunks
-        phrase_queue: Queue to send extracted phrases
-        delimiters: List of phrase-ending delimiters
+        chunk_queue: Queue containing incoming text chunks.
+        phrase_queue: Queue to enqueue extracted phrases.
+        delimiter_pattern: Compiled regex pattern for delimiters.
+        use_segmentation: Flag indicating whether to use segmentation.
+        character_max: Maximum number of characters before stopping segmentation.
     """
     working_string = ""
-    delimiter_logic_on = True
+    chars_processed_in_segmentation = 0
+    segmentation_active = use_segmentation
 
     while True:
         chunk = await chunk_queue.get()
-        
+
         if chunk is None:
-            # End of stream processing
-            if delimiter_logic_on and working_string.strip():
-                logger.debug(f"Final phrase: {working_string.strip()}")
-                print(f"Final phrase: {working_string.strip()}")  # Print final phrase
-                await phrase_queue.put(working_string.strip())
+            # End of stream: enqueue any remaining phrase and signal termination
+            if working_string.strip():
+                phrase = working_string.strip()
+                await phrase_queue.put(phrase)
             await phrase_queue.put(None)
             break
 
@@ -61,19 +66,26 @@ async def process_chunks(
         if content:
             working_string += content
 
-            while delimiter_logic_on:
-                # Use synchronous function call without await
-                delimiter_index = find_earliest_delimiter(working_string, delimiters)
-                
-                if delimiter_index is None:
-                    break
+            if segmentation_active and delimiter_pattern:
+                while True:
+                    match = delimiter_pattern.search(working_string)
+                    if match:
+                        # Extract phrase up to and including the delimiter
+                        end_index = match.end()
+                        phrase = working_string[:end_index].strip()
+                        if phrase:
+                            await phrase_queue.put(phrase)
+                            chars_processed_in_segmentation += len(phrase)
+                        # Update working_string by removing the processed phrase
+                        working_string = working_string[end_index:]
 
-                phrase = working_string[:delimiter_index + 1]
-                working_string = working_string[delimiter_index + 1:]
+                        # Check if character_max has been reached
+                        if chars_processed_in_segmentation >= character_max:
+                            segmentation_active = False
+                            break
+                    else:
+                        break
 
-                logger.debug(f"Extracted phrase: {phrase.strip()}")
-                print(f"Extracted phrase: {phrase.strip()}")  # Print each extracted phrase
-                await phrase_queue.put(phrase.strip())
 
 async def stream_anthropic_completion(
     messages: Sequence[Dict[str, Union[str, Any]]],
@@ -81,25 +93,30 @@ async def stream_anthropic_completion(
     client: Optional[AsyncAnthropic] = None
 ) -> AsyncIterator[str]:
     """
-    Stream Anthropic completion with delimiter-based phrase extraction.
-    
+    Stream Anthropic completion and process chunks for phrase extraction.
+
     Args:
-        messages: Conversation messages
-        phrase_queue: Queue for extracted phrases
-        client: Optional Anthropic client
-    
+        messages: Conversation messages.
+        phrase_queue: Queue for extracted phrases.
+        client: Optional Anthropic client.
+
     Returns:
-        Async iterator of streaming text chunks
-    
-    Raises:
-        HTTPException: If there's an error calling the Anthropic API
+        Async iterator of streaming text chunks.
     """
     client = client or get_anthropic_client()
-    delimiters = Config.DELIMITERS
+    delimiters = Config.TTS_CONFIG.DELIMITERS
+    use_segmentation = Config.TTS_CONFIG.USE_SEGMENTATION
+    character_max = Config.TTS_CONFIG.CHARACTER_MAXIMUM
+
+    # Pre-compile the delimiter pattern once
+    delimiter_pattern = compile_delimiter_pattern(delimiters)
+
     chunk_queue = asyncio.Queue()
 
     # Start the chunk processing task
-    chunk_processor_task = asyncio.create_task(process_chunks(chunk_queue, phrase_queue, delimiters))
+    chunk_processor_task = asyncio.create_task(
+        process_chunks(chunk_queue, phrase_queue, delimiter_pattern, use_segmentation, character_max)
+    )
 
     try:
         async with client.messages.stream(
@@ -112,11 +129,11 @@ async def stream_anthropic_completion(
             stop_sequences=Config.ANTHROPIC_STOP_SEQUENCES,
         ) as stream:
             async for chunk in stream.text_stream:
-                yield chunk
-                await chunk_queue.put(chunk)
+                yield chunk  # Yield raw chunk to the frontend
+                await chunk_queue.put(chunk)  # Send chunk for processing
 
-        await chunk_queue.put(None)
-        await chunk_processor_task
+        await chunk_queue.put(None)  # Signal the end of chunks
+        await chunk_processor_task  # Wait for processing to complete
 
     except Exception as e:
         logger.error(f"Error calling Anthropic API: {e}")

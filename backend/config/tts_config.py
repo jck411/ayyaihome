@@ -29,6 +29,8 @@ class TTSConfig:
         self.USE_SEGMENTATION = pipeline.get('USE_SEGMENTATION')
         self.DELIMITERS = pipeline.get('DELIMITERS')
         self.NLP_MODULE = pipeline.get('NLP_MODULE')
+        self.CHARACTER_MAXIMUM = pipeline.get ('CHARACTER_MAXIMUM')
+
 
 
         # TTS Models

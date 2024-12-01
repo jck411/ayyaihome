@@ -1,11 +1,12 @@
 GENERAL_TTS:
-  TTS_PROVIDER: "openai"  # Possible values: "openai", "azure"
+  TTS_PROVIDER: "azure"  # Possible values: "openai", "azure"
 
 PROCESSING_PIPELINE:
 
-  USE_SEGMENTATION: false # (global setting) Set to false to turn off segmentation during streaming
-  DELIMITERS: ["\n"]  # Delimiters used for segmentation, eg., ". ", "? ", "! "
+  USE_SEGMENTATION: true # (global setting) Set to false to turn off segmentation during streaming
+  DELIMITERS: ["\n", ". ", "? ", "! ", "* "]  # Delimiters used for segmentation, eg., ". ", "? ", "! "
   NLP_MODULE: "none"  # Specify the NLP module, e.g., "nltk", "stanza", "spacy", "none"
+  CHARACTER_MAXIMUM: 50
 
 TTS_MODELS:
   # OpenAI TTS Configuration

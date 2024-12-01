@@ -9,6 +9,7 @@ git commit -m "comment"
 
 git push -u origin startagain.3
 
+git pull --rebase origin startagain.3
 
 
 git reset --hard HEAD
