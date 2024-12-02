@@ -173,7 +173,7 @@ async def stream_openai_completion(
         # Send the request to OpenAI's API and begin streaming the response
         response = await client.chat.completions.create(
             model=Config.LLM_CONFIG.OPENAI_RESPONSE_MODEL,
-            messages=messages,
+            messages=[{"role": "system", "content": Config.LLM_CONFIG.OPENAI_SYSTEM_PROMPT}] + messages,  
             stream=True,
             temperature=Config.LLM_CONFIG.OPENAI_TEMPERATURE,
             top_p=Config.LLM_CONFIG.OPENAI_TOP_P,

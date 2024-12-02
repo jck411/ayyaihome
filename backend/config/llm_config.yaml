@@ -4,7 +4,7 @@ LLM_MODEL_CONFIG:
     TEMPERATURE: 1.0
     TOP_P: 1.0
     N: 1
-    SYSTEM_PROMPT_CONTENT: "You are a helpful but witty and dry assistant"
+    SYSTEM_PROMPT_CONTENT: "You rhyme all your replies"
     STREAM_OPTIONS:
       include_usage: true
     STOP: null
@@ -31,7 +31,7 @@ LLM_MODEL_CONFIG:
   GEMINI:
     MODEL_VERSION: "gemini-1.5-flash"  # Specify the desired Gemini model version
     TEMPERATURE: 0.7  # Adjust the temperature for response randomness
-    SYSTEM_PROMPT: "You are a knowledgeable assistant."  # Define the system instruction
+    SYSTEM_PROMPT: "speak like yoda"  # Define the system instruction
     MAX_OUTPUT_TOKENS: 150  # Set the maximum number of tokens for the response
     TOP_P: 0.9  # Adjust the nucleus sampling parameter
     CANDIDATE_COUNT: 1  # Number of response candidates to generate
