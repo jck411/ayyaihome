@@ -1,34 +1,39 @@
 import asyncio
 import logging
 import re
-from typing import List, Dict, Any, AsyncIterator, Optional, Sequence, Union
+from typing import Any, AsyncIterator, Dict, List, Optional, Sequence, Union
 
-import google.generativeai as genai
+from openai import AsyncOpenAI
 from fastapi import HTTPException
 
-
 from backend.config import Config
-from backend.config.clients import get_google_client
+from backend.config.clients import get_grok_client
 
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+# Initialize a logger for the module
 logger = logging.getLogger(__name__)
 
-def extract_content_from_gemini_chunk(chunk: Any) -> Optional[str]:
+
+def extract_content_from_grok_chunk(chunk: Any) -> Optional[str]:
     """
-    Extracts the content string from Google's Gemini API streaming response.
+    Extracts the content string from Grok's ChatCompletionChunk.
 
     Args:
-        chunk (Any): The chunk object from Gemini's streaming response.
+        chunk (Any): The chunk object from Grok's streaming response.
 
     Returns:
         Optional[str]: The extracted content string or None if not available.
+
+    This function attempts to access the content string in the first
+    choice of the chunk's delta field. If the structure of the chunk
+    is unexpected, it logs a warning and returns None.
     """
     try:
-        return chunk.text or None
-    except AttributeError:
+        # Access the first choice's delta content
+        return chunk.choices[0].delta.content
+    except (IndexError, AttributeError) as e:
+        logger.warning(f"Unexpected chunk format: {chunk}. Error: {e}")
         return None
+
 
 def compile_delimiter_pattern(delimiters: List[str]) -> Optional[re.Pattern]:
     """
@@ -39,11 +44,6 @@ def compile_delimiter_pattern(delimiters: List[str]) -> Optional[re.Pattern]:
 
     Returns:
         Optional[re.Pattern]: Precompiled regex pattern or None if no delimiters are provided.
-
-    This function processes the list of delimiters by:
-    1. Sorting them by length in descending order to ensure longer delimiters are matched first.
-    2. Escaping special characters in each delimiter to ensure they are treated as literal strings in the regex.
-    3. Joining the processed delimiters with '|' for alternation, enabling the regex engine to match any of them.
     """
     if not delimiters:
         return None
@@ -56,6 +56,7 @@ def compile_delimiter_pattern(delimiters: List[str]) -> Optional[re.Pattern]:
 
     # Join the escaped delimiters with '|' for regex alternation and compile
     return re.compile("|".join(escaped_delimiters))
+
 
 async def process_chunks(
     chunk_queue: asyncio.Queue,
@@ -74,9 +75,6 @@ async def process_chunks(
         delimiter_pattern (Optional[re.Pattern]): Precompiled regex pattern for delimiters.
         use_segmentation (bool): Whether to enable segmentation based on delimiters.
         character_max (int): Maximum number of characters to process before stopping segmentation.
-
-    This function processes chunks iteratively, extracting phrases based on the provided delimiter pattern
-    and segmentation rules. Remaining unprocessed text is retained in `working_string` until new chunks arrive.
     """
     working_string = ""
     chars_processed_in_segmentation = 0
@@ -98,7 +96,7 @@ async def process_chunks(
             break
 
         # Extract content from the chunk
-        content = extract_content_from_gemini_chunk(chunk)
+        content = extract_content_from_grok_chunk(chunk)
         if content:
             working_string += content
 
@@ -125,30 +123,31 @@ async def process_chunks(
                         # Exit the loop if no more matches are found
                         break
 
-async def stream_google_completion(
+
+async def stream_grok_completion(
     messages: Sequence[Dict[str, Union[str, Any]]],
     phrase_queue: asyncio.Queue,
-    client: Optional[Any] = None
+    client: Optional[AsyncOpenAI] = None
 ) -> AsyncIterator[str]:
     """
-    Stream Google's Gemini completion and process chunks for phrase extraction.
+    Stream Grok completion and process chunks for phrase extraction.
 
     Args:
-        messages (Sequence[Dict[str, Union[str, Any]]]): List of conversation messages to send to Google's Gemini API.
+        messages (Sequence[Dict[str, Union[str, Any]]]): List of conversation messages to send to Grok.
         phrase_queue (asyncio.Queue): Queue to enqueue extracted phrases for downstream processing.
-        client (Optional[Any]): Optional Gemini client for making API requests.
+        client (Optional[AsyncOpenAI]): Optional Grok client for making API requests.
 
     Returns:
         AsyncIterator[str]: Async iterator of streaming text chunks.
 
-    This function handles Gemini's streaming response by:
-    1. Sending the conversation messages to Gemini's API.
+    This function handles Grok's streaming response by:
+    1. Sending the conversation messages to Grok's API.
     2. Streaming chunks of text from the response.
     3. Extracting content from each chunk and yielding it to the frontend.
     4. Enqueuing raw chunks for further processing (e.g., segmentation).
     """
-    # Use the provided client or retrieve the default Gemini client
-    client = client or get_google_client()
+    # Use the provided client or retrieve the default one
+    client = client or get_grok_client()
 
     # Retrieve configuration settings for delimiters and segmentation
     delimiters = Config.TTS_CONFIG.DELIMITERS
@@ -167,25 +166,20 @@ async def stream_google_completion(
     )
 
     try:
-        # Configure the Gemini client with API key and model version
-        genai.configure(api_key=client["api_key"])
-        model = genai.GenerativeModel(client["model_version"])
-        logger.info("Gemini client initialized.")
-
-        # Construct the system prompt and user input
-        system_prompt = Config.LLM_CONFIG.GEMINI_SYSTEM_PROMPT
-        user_inputs = "\n".join(msg["content"] for msg in messages)
-        complete_prompt = f"{system_prompt}\n\n{user_inputs}"
-        logger.debug(f"Complete prompt for Gemini API: {complete_prompt}")
-
-        # Send the request to Gemini's API and begin streaming the response
-        response = await model.generate_content_async(complete_prompt, stream=True)
-        logger.info("Gemini streaming response started.")
+        # Send the request to Grok's API and begin streaming the response
+        response = await client.chat.completions.create(
+            model=Config.LLM_CONFIG.GROK_RESPONSE_MODEL,
+            messages=[{"role": "system", "content": Config.LLM_CONFIG.GROK_SYSTEM_PROMPT}] + messages,  
+            stream=True,
+            temperature=Config.LLM_CONFIG.GROK_TEMPERATURE,
+            top_p=Config.LLM_CONFIG.GROK_TOP_P,
+        )
+        logger.info("Grok streaming response started.")
 
         # Stream chunks from the response
         async for chunk in response:
             # Extract and yield the content to the frontend
-            content = extract_content_from_gemini_chunk(chunk)
+            content = extract_content_from_grok_chunk(chunk)
             if content:
                 yield content
             # Enqueue the raw chunk for processing
@@ -197,7 +191,6 @@ async def stream_google_completion(
 
     except Exception as e:
         # Log any errors and terminate the phrase queue
-        logger.error(f"Error during Gemini streaming: {e}")
+        logger.error(f"Error during Grok streaming: {e}")
         await chunk_queue.put(None)  # Ensure processing task can terminate
-        raise HTTPException(status_code=500, detail=f"Gemini API error: {e}")
-
+        raise HTTPException(status_code=500, detail=f"Grok API error: {e}")

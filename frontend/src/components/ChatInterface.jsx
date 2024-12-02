@@ -33,6 +33,18 @@ const generateAIResponse = async (service, messages, onUpdate) => {
         role: msg.sender === "user" ? "user" : "assistant",
         content: msg.text
       }));
+    } else if (service === 'grok') {
+      endpoint = 'http://localhost:8000/api/grok';
+      formattedMessages = messages.map(msg => ({
+        role: msg.sender === "user" ? "user" : "assistant",
+        content: msg.text
+      }));
+    } else if (service === 'custom') {
+      endpoint = 'http://localhost:8000/api/custom';
+      formattedMessages = messages.map(msg => ({
+        role: msg.sender === "user" ? "user" : "assistant",
+        content: msg.text
+      }));
     } else {
       throw new Error('Unsupported service selected');
     }
@@ -74,7 +86,7 @@ const ChatInterface = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [selectedService, setSelectedService] = useState('anthropic');
   const messagesEndRef = useRef(null);
-  
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
@@ -133,6 +145,8 @@ const ChatInterface = () => {
             <option value="gemini">Gemini</option>
             <option value="mistral">Mistral</option>
             <option value="llama">Llama</option>
+            <option value="grok">Grok</option>
+            <option value="custom">Custom</option>
           </select>
           <button className="p-2 hover:bg-gray-100 rounded-full">
             <Settings className="w-5 h-5 text-gray-600" />

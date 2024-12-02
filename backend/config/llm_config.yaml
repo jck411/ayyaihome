@@ -45,3 +45,14 @@ LLM_MODEL_CONFIG:
     STOP_SEQUENCES: null
     STREAM_OPTIONS:
       include_usage: true
+
+  GROK:
+    API_BASE: "https://api.x.ai/v1"
+    RESPONSE_MODEL: "grok-beta"  # Specify the desired Grok model
+    TEMPERATURE: 0.7  # Adjust the temperature for response creativity
+    TOP_P: 0.9  # Nucleus sampling for diversity
+    SYSTEM_PROMPT: "You are a witty and creative assistant."  # Define the system instruction
+    MAX_TOKENS: 2000  # Set the maximum number of tokens for the response
+    STOP: null  # Define optional stop sequences
+    STREAM_OPTIONS:
+      include_usage: true  # Include usage details in the response

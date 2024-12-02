@@ -67,6 +67,18 @@ class LLMConfig:
         self.MISTRAL_STOP_SEQUENCES = mistral_config.get('STOP_SEQUENCES', [])
         self.MISTRAL_STREAM_OPTIONS = mistral_config.get('STREAM_OPTIONS', {"include_usage": True})
 
+        # Grok Configuration
+        grok_config = llm_config.get('GROK', {})
+        self.GROK_API_KEY = os.getenv("GROK_API_KEY")  # Fetch from environment variable
+        self.GROK_API_BASE = grok_config.get('API_BASE', "https://api.x.ai/v1")  # Default API base
+        self.GROK_RESPONSE_MODEL = grok_config.get('RESPONSE_MODEL', "grok-beta")
+        self.GROK_TEMPERATURE = grok_config.get('TEMPERATURE', 0.7)
+        self.GROK_TOP_P = grok_config.get('TOP_P', 0.9)
+        self.GROK_SYSTEM_PROMPT = grok_config.get('SYSTEM_PROMPT', "You are a creative assistant.")
+        self.GROK_MAX_TOKENS = grok_config.get('MAX_TOKENS', 2000)
+        self.GROK_STREAM_OPTIONS = grok_config.get('STREAM_OPTIONS', {"include_usage": True})
+        self.GROK_STOP = grok_config.get('STOP', None)
+
         # Validate critical fields
         if not self.OPENAI_API_KEY:
             raise ValueError("OpenAI API key (OPENAI_API_KEY) is missing from the .env file.")
@@ -76,6 +88,8 @@ class LLMConfig:
             raise ValueError("Google API key (GOOGLE_API_KEY) is missing from the .env file.")
         if not self.MISTRAL_API_KEY:
             raise ValueError("Mistral API key (MISTRAL_API_KEY) is missing from the .env file.")
+        if not self.GROK_API_KEY:
+            raise ValueError("Grok API key (GROK_API_KEY) is missing from the .env file.")
 
     @classmethod
     def get_instance(cls) -> "LLMConfig":

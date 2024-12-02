@@ -106,3 +106,24 @@ def get_mistral_client(api_key: Optional[str] = None) -> Mistral:
     if not api_key:
         raise ValueError("Mistral API key is not set.")
     return Mistral(api_key=api_key)
+
+def get_grok_client(api_key: str = None) -> AsyncOpenAI:
+    """
+    Creates a Grok client.
+
+    Args:
+        api_key (str, optional): Grok API key. Defaults to the value in Config.
+
+    Returns:
+        AsyncOpenAI: Configured Grok client.
+    """
+    from backend.config import Config  # Delayed import to avoid circular dependency
+
+    if api_key is None:
+        api_key = Config.GROK_API_KEY
+
+    if not api_key:
+        raise ValueError("Grok API key is not set.")
+
+    base_url = Config.GROK_API_BASE
+    return AsyncOpenAI(api_key=api_key, base_url=base_url)

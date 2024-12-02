@@ -8,12 +8,15 @@ from backend.text_generation.openai_chat_completions import stream_openai_comple
 from backend.text_generation.anthropic_chat_completions import stream_anthropic_completion
 from backend.text_generation.google_chat_completions import stream_google_completion
 from backend.text_generation.mistral_chat_completions import stream_mistral_completion
+from backend.text_generation.grok_chat_completions import stream_grok_completion
+
 from backend.stream_processing import process_streams
 from backend.utils.request_utils import (
     validate_and_prepare_for_anthropic,
     validate_and_prepare_for_openai_completion,
     validate_and_prepare_for_google_completion,
     validate_and_prepare_for_mistral_completion,
+    validate_and_prepare_for_grok_completion,
 )
 
 logger = logging.getLogger(__name__)
@@ -158,4 +161,38 @@ async def mistral_stream(request: Request):
 
     except Exception as e:
         logger.error(f"Error in mistral_stream: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {e}")
+    
+@router.post("/api/grok")
+async def grok_stream(request: Request):
+    """
+    Endpoint for handling chat requests with Grok's API.
+    """
+    try:
+        # Use the validation function for Grok
+        messages = await validate_and_prepare_for_grok_completion(request)
+
+        # Initialize asynchronous queues
+        phrase_queue = asyncio.Queue()
+        audio_queue = asyncio.Queue()
+
+        # Start the process_streams task to handle real-time streaming
+        asyncio.create_task(
+            process_streams(
+                phrase_queue=phrase_queue,
+                audio_queue=audio_queue,
+            )
+        )
+
+        # Return the streaming response
+        return StreamingResponse(
+            stream_grok_completion(
+                messages=messages,
+                phrase_queue=phrase_queue,
+            ),
+            media_type="text/plain",
+        )
+
+    except Exception as e:
+        logger.error(f"Error in grok_stream: {e}")
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {e}")
