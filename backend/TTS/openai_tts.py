@@ -4,6 +4,10 @@ from typing import Optional
 from openai import AsyncOpenAI
 from backend.config import Config, get_openai_client
 
+# Configure logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
+
 # Disable logging for httpx
 logging.getLogger("httpx").setLevel(logging.CRITICAL)
 
@@ -21,7 +25,10 @@ async def text_to_speech_processor(
         speed = Config.OPENAI_TTS_SPEED
         response_format = Config.OPENAI_AUDIO_FORMAT
         chunk_size = Config.OPENAI_TTS_CHUNK_SIZE
-    except AttributeError:
+        logger.info("Loaded TTS configuration: model=%s, voice=%s, speed=%s, format=%s, chunk_size=%d",
+                    model, voice, speed, response_format, chunk_size)
+    except AttributeError as e:
+        logger.error("Missing TTS configuration: %s", e)
         await audio_queue.put(None)
         return
 
@@ -29,17 +36,18 @@ async def text_to_speech_processor(
         while True:
             phrase = await phrase_queue.get()
             if phrase is None:
-                # Signal the end of processing
+                logger.info("Received termination signal. Ending processing.")
                 await audio_queue.put(None)
                 return
 
-            # Strip the phrase and check if it's non-empty
             stripped_phrase = phrase.strip()
             if not stripped_phrase:
+                logger.warning("Received empty phrase. Skipping.")
                 continue
 
+            logger.info("Processing phrase: '%s'", stripped_phrase)
+
             try:
-                # Make the TTS API call with streaming response
                 async with openai_client.audio.speech.with_streaming_response.create(
                     model=model,
                     voice=voice,
@@ -53,9 +61,10 @@ async def text_to_speech_processor(
                 # Add a small pause between phrases
                 await audio_queue.put(b'\x00' * chunk_size)
 
-            except Exception:
-                # Skip to the next phrase without terminating the audio queue
+            except Exception as e:
+                logger.error("Error processing phrase '%s': %s", stripped_phrase, e)
                 continue
 
-    except Exception:
+    except Exception as e:
+        logger.critical("Unexpected error in text_to_speech_processor: %s", e, exc_info=True)
         await audio_queue.put(None)

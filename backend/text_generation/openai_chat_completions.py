@@ -1,80 +1,200 @@
 import asyncio
-from typing import List, Dict, Optional, AsyncIterator
+import logging
+import re
+from typing import Any, AsyncIterator, Dict, List, Optional, Sequence, Union
+
 from openai import AsyncOpenAI
 from fastapi import HTTPException
 
 from backend.config import Config
-from backend.config.clients import get_anthropic_client, get_openai_client
+from backend.config.clients import get_openai_client
 
-from backend.phrase_accumulator import PhraseAccumulator
-from backend.text_generation.stream_handler import handle_streaming, extract_content_from_openai_chunk
-import logging
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+# Initialize a logger for the module
 logger = logging.getLogger(__name__)
 
-async def stream_completion(
-    messages: List[Dict[str, str]],
-    phrase_queue: asyncio.Queue,
-    openai_client: Optional[AsyncOpenAI] = None
-) -> AsyncIterator[str]:
+def extract_content_from_openai_chunk(chunk: Any) -> Optional[str]:
     """
-    Streams OpenAI chat completions to the frontend and processes phrases.
+    Extracts the content string from OpenAI's ChatCompletionChunk.
 
     Args:
-        messages (List[Dict[str, str]]): The chat messages.
-        phrase_queue (asyncio.Queue): The queue to dispatch processed phrases.
-        openai_client (Optional[AsyncOpenAI]): The OpenAI client.
+        chunk (Any): The chunk object from OpenAI's streaming response.
 
-    Yields:
-        AsyncIterator[str]: The streamed content strings.
+    Returns:
+        Optional[str]: The extracted content string or None if not available.
+
+    This function attempts to access the content string in the first
+    choice of the chunk's delta field. If the structure of the chunk
+    is unexpected, it logs a warning and returns None.
     """
-    logger.info("Starting stream_completion...")  # Log function start
+    try:
+        # Access the first choice's delta content
+        return chunk.choices[0].delta.content
+    except (IndexError, AttributeError) as e:
+        logger.warning(f"Unexpected chunk format: {chunk}. Error: {e}")
+        return None
+
+def compile_delimiter_pattern(delimiters: List[str]) -> Optional[re.Pattern]:
+    """
+    Compile a regex pattern for a list of delimiters, optimized for speed.
+
+    Args:
+        delimiters (List[str]): List of delimiter strings.
+
+    Returns:
+        Optional[re.Pattern]: Precompiled regex pattern or None if no delimiters are provided.
+
+    This function processes the list of delimiters by:
+    1. Sorting them by length in descending order to ensure longer delimiters are matched first.
+    2. Escaping special characters in each delimiter to ensure they are treated as literal strings in the regex.
+    3. Joining the processed delimiters with '|' for alternation, enabling the regex engine to match any of them.
+    """
+    if not delimiters:
+        return None
+
+    # Sort delimiters by length (descending) to prioritize longer matches
+    sorted_delimiters = sorted(delimiters, key=len, reverse=True)
+
+    # Escape special characters in each delimiter
+    escaped_delimiters = map(re.escape, sorted_delimiters)
+
+    # Join the escaped delimiters with '|' for regex alternation and compile
+    return re.compile("|".join(escaped_delimiters))
+
+async def process_chunks(
+    chunk_queue: asyncio.Queue,
+    phrase_queue: asyncio.Queue,
+    delimiter_pattern: Optional[re.Pattern],
+    use_segmentation: bool,
+    character_max: int
+):
+    """
+    Process chunks from chunk_queue, extract phrases based on delimiters and segmentation settings,
+    and enqueue them into phrase_queue.
+
+    Args:
+        chunk_queue (asyncio.Queue): Queue containing incoming text chunks from the streaming response.
+        phrase_queue (asyncio.Queue): Queue to enqueue extracted phrases for downstream processing.
+        delimiter_pattern (Optional[re.Pattern]): Precompiled regex pattern for delimiters.
+        use_segmentation (bool): Whether to enable segmentation based on delimiters.
+        character_max (int): Maximum number of characters to process before stopping segmentation.
+
+    This function processes chunks iteratively, extracting phrases based on the provided delimiter pattern
+    and segmentation rules. Remaining unprocessed text is retained in `working_string` until new chunks arrive.
+    """
+    working_string = ""
+    chars_processed_in_segmentation = 0
+    segmentation_active = use_segmentation
+
+    while True:
+        # Wait for the next chunk from the queue
+        chunk = await chunk_queue.get()
+
+        # If the chunk is None, it signals the end of the stream
+        if chunk is None:
+            # Process any remaining text in the working string
+            if working_string.strip():
+                phrase = working_string.strip()
+                await phrase_queue.put(phrase)
+
+            # Signal the termination of the phrase queue
+            await phrase_queue.put(None)
+            break
+
+        # Extract content from the chunk
+        content = extract_content_from_openai_chunk(chunk)
+        if content:
+            working_string += content
+
+            # Apply segmentation logic if enabled
+            if segmentation_active and delimiter_pattern:
+                while True:
+                    # Search for a delimiter match in the working string
+                    match = delimiter_pattern.search(working_string)
+                    if match:
+                        # Extract text up to and including the matched delimiter
+                        end_index = match.end()
+                        phrase = working_string[:end_index].strip()
+                        if phrase:
+                            await phrase_queue.put(phrase)
+                            chars_processed_in_segmentation += len(phrase)
+                        # Update the working string by removing the processed phrase
+                        working_string = working_string[end_index:]
+
+                        # Disable segmentation if the character limit is reached
+                        if chars_processed_in_segmentation >= character_max:
+                            segmentation_active = False
+                            break
+                    else:
+                        # Exit the loop if no more matches are found
+                        break
+
+async def stream_openai_completion(
+    messages: Sequence[Dict[str, Union[str, Any]]],
+    phrase_queue: asyncio.Queue,
+    client: Optional[AsyncOpenAI] = None
+) -> AsyncIterator[str]:
+    """
+    Stream OpenAI completion and process chunks for phrase extraction.
+
+    Args:
+        messages (Sequence[Dict[str, Union[str, Any]]]): List of conversation messages to send to OpenAI.
+        phrase_queue (asyncio.Queue): Queue to enqueue extracted phrases for downstream processing.
+        client (Optional[AsyncOpenAI]): Optional OpenAI client for making API requests.
+
+    Returns:
+        AsyncIterator[str]: Async iterator of streaming text chunks.
+
+    This function handles OpenAI's streaming response by:
+    1. Sending the conversation messages to OpenAI's API.
+    2. Streaming chunks of text from the response.
+    3. Extracting content from each chunk and yielding it to the frontend.
+    4. Enqueuing raw chunks for further processing (e.g., segmentation).
+    """
+    # Use the provided client or retrieve the default one
+    client = client or get_openai_client()
+
+    # Retrieve configuration settings for delimiters and segmentation
+    delimiters = Config.TTS_CONFIG.DELIMITERS
+    use_segmentation = Config.TTS_CONFIG.USE_SEGMENTATION
+    character_max = Config.TTS_CONFIG.CHARACTER_MAXIMUM
+
+    # Pre-compile the delimiter pattern once
+    delimiter_pattern = compile_delimiter_pattern(delimiters)
+
+    # Create a queue to hold raw chunks
+    chunk_queue = asyncio.Queue()
+
+    # Start the chunk processing task
+    chunk_processor_task = asyncio.create_task(
+        process_chunks(chunk_queue, phrase_queue, delimiter_pattern, use_segmentation, character_max)
+    )
 
     try:
-        # Get the OpenAI client if not provided
-        openai_client = openai_client or get_openai_client()
-        logger.info("OpenAI client initialized.")
-
-        # Fetch configuration values dynamically from Config
-        model = Config.LLM_CONFIG.OPENAI_RESPONSE_MODEL
-        temperature = Config.LLM_CONFIG.OPENAI_TEMPERATURE
-        top_p = Config.LLM_CONFIG.OPENAI_TOP_P
-        stream_options = Config.LLM_CONFIG.OPENAI_STREAM_OPTIONS
-
-        logger.info(f"Using OpenAI model: {model}")
-        logger.debug(f"Temperature: {temperature}, Top P: {top_p}, Stream options: {stream_options}")
-
-        # Construct the PhraseAccumulator
-        accumulator = PhraseAccumulator(Config, phrase_queue)
-        logger.info("PhraseAccumulator initialized.")
-
-        # Make the API call to OpenAI
-        logger.info("Sending request to OpenAI API for chat completions...")
-        response = await openai_client.chat.completions.create(
-            model=model,
+        # Send the request to OpenAI's API and begin streaming the response
+        response = await client.chat.completions.create(
+            model=Config.LLM_CONFIG.OPENAI_RESPONSE_MODEL,
             messages=messages,
             stream=True,
-            temperature=temperature,
-            top_p=top_p,
-            stream_options=stream_options,
+            temperature=Config.LLM_CONFIG.OPENAI_TEMPERATURE,
+            top_p=Config.LLM_CONFIG.OPENAI_TOP_P,
         )
-        logger.info("OpenAI API request successful. Streaming response...")
+        logger.info("OpenAI streaming response started.")
 
-        # Process the stream and yield content
-        async for content in handle_streaming(
-            response,
-            accumulator,
-            content_extractor=extract_content_from_openai_chunk,
-            api_name="OpenAI"
-        ):
-            logger.info(f"Streamed content: {content}")  # Log streamed content
-            yield content
+        # Stream chunks from the response
+        async for chunk in response:
+            # Extract and yield the content to the frontend
+            content = extract_content_from_openai_chunk(chunk)
+            if content:
+                yield content
+            # Enqueue the raw chunk for processing
+            await chunk_queue.put(chunk)
+
+        # Signal the end of the chunk queue and wait for processing to complete
+        await chunk_queue.put(None)
+        await chunk_processor_task
 
     except Exception as e:
-        await phrase_queue.put(None)
-        logger.error(f"Exception occurred in stream_completion: {e}")
-        raise HTTPException(status_code=500, detail=f"Error calling OpenAI API: {e}")
-    finally:
-        logger.info("Finished stream_completion.")  # Log function end
+        # Log any errors and terminate the phrase queue
+        logger.error(f"Error during OpenAI streaming: {e}")
+        await chunk_queue.put(None)  # Ensure processing task can terminate
+        raise HTTPException(status_code=500, detail=f"OpenAI API error: {e}")

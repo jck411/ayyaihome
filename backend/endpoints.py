@@ -4,7 +4,7 @@ from fastapi.responses import StreamingResponse
 import logging
 
 from backend.config import Config
-from backend.text_generation.openai_chat_completions import stream_completion
+from backend.text_generation.openai_chat_completions import stream_openai_completion
 from backend.text_generation.anthropic_chat_completions import stream_anthropic_completion
 from backend.text_generation.google_chat_completions import stream_google_completion
 # from backend.text_generation.mistral_chat_completions import stream_mistral_completion
@@ -80,7 +80,7 @@ async def openai_stream(request: Request):
 
         # Return the streaming response
         return StreamingResponse(
-            stream_completion(
+            stream_openai_completion(
                 messages=messages,
                 phrase_queue=phrase_queue,
             ),
