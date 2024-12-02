@@ -1,6 +1,10 @@
+from typing import Optional
+from mistralai import Mistral
 from openai import AsyncOpenAI
 from anthropic import AsyncAnthropic
 from azure.cognitiveservices.speech import SpeechConfig
+
+from backend.config.config import Config
 
 def get_openai_client(api_key: str = None) -> AsyncOpenAI:
     """
@@ -85,3 +89,20 @@ def get_google_client(api_key: str = None):
         "api_key": api_key,
         "model_version": Config.GEMINI_MODEL_VERSION,
     }
+
+def get_mistral_client(api_key: Optional[str] = None) -> Mistral:
+    """
+    Creates a Mistral client.
+
+    Args:
+        api_key (str, optional): Mistral API key. Defaults to the value in Config.
+
+    Returns:
+        Mistral: Configured Mistral client.
+    """
+    if api_key is None:
+        api_key = Config.MISTRAL_API_KEY
+
+    if not api_key:
+        raise ValueError("Mistral API key is not set.")
+    return Mistral(api_key=api_key)

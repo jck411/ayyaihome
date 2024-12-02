@@ -35,3 +35,13 @@ LLM_MODEL_CONFIG:
     MAX_OUTPUT_TOKENS: 150  # Set the maximum number of tokens for the response
     TOP_P: 0.9  # Adjust the nucleus sampling parameter
     CANDIDATE_COUNT: 1  # Number of response candidates to generate
+
+  MISTRAL:
+    RESPONSE_MODEL: "mistral-tiny"  # Specify the desired Mistral model
+    TEMPERATURE: 0.7  # Adjust the temperature for response randomness
+    TOP_P: 0.9  # Adjust the nucleus sampling parameter
+    SYSTEM_PROMPT: "You are a helpful and concise assistant."  # Define the system instruction
+    MAX_TOKENS: 1500  # Set the maximum number of tokens for the response
+    STOP_SEQUENCES: null
+    STREAM_OPTIONS:
+      include_usage: true

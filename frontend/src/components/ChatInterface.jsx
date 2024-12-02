@@ -21,6 +21,18 @@ const generateAIResponse = async (service, messages, onUpdate) => {
         role: msg.sender === "user" ? "user" : "assistant",
         content: msg.text
       }));
+    } else if (service === 'mistral') {
+      endpoint = 'http://localhost:8000/api/mistral';
+      formattedMessages = messages.map(msg => ({
+        role: msg.sender === "user" ? "user" : "assistant",
+        content: msg.text
+      }));
+    } else if (service === 'llama') {
+      endpoint = 'http://localhost:8000/api/llama';
+      formattedMessages = messages.map(msg => ({
+        role: msg.sender === "user" ? "user" : "assistant",
+        content: msg.text
+      }));
     } else {
       throw new Error('Unsupported service selected');
     }
@@ -118,9 +130,9 @@ const ChatInterface = () => {
           >
             <option value="anthropic">Claude</option>
             <option value="openai">GPT</option>
-            <option value="gemini">Gemini
-
-            </option>
+            <option value="gemini">Gemini</option>
+            <option value="mistral">Mistral</option>
+            <option value="llama">Llama</option>
           </select>
           <button className="p-2 hover:bg-gray-100 rounded-full">
             <Settings className="w-5 h-5 text-gray-600" />

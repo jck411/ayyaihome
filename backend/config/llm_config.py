@@ -56,6 +56,17 @@ class LLMConfig:
         self.GEMINI_TOP_P = gemini_config.get('TOP_P', 0.9)
         self.GEMINI_CANDIDATE_COUNT = gemini_config.get('CANDIDATE_COUNT', 1)
 
+        # Mistral Configuration
+        mistral_config = llm_config.get('MISTRAL', {})
+        self.MISTRAL_API_KEY = os.getenv(mistral_config.get('API_KEY_ENV_VAR', 'MISTRAL_API_KEY'))  # Fetch API key from specified environment variable
+        self.MISTRAL_RESPONSE_MODEL = mistral_config.get('RESPONSE_MODEL', "mistral-tiny")
+        self.MISTRAL_TEMPERATURE = mistral_config.get('TEMPERATURE', 0.7)
+        self.MISTRAL_TOP_P = mistral_config.get('TOP_P', 0.9)
+        self.MISTRAL_SYSTEM_PROMPT = mistral_config.get('SYSTEM_PROMPT', "You are a helpful and concise assistant.")
+        self.MISTRAL_MAX_TOKENS = mistral_config.get('MAX_TOKENS', 1500)
+        self.MISTRAL_STOP_SEQUENCES = mistral_config.get('STOP_SEQUENCES', [])
+        self.MISTRAL_STREAM_OPTIONS = mistral_config.get('STREAM_OPTIONS', {"include_usage": True})
+
         # Validate critical fields
         if not self.OPENAI_API_KEY:
             raise ValueError("OpenAI API key (OPENAI_API_KEY) is missing from the .env file.")
@@ -63,6 +74,8 @@ class LLMConfig:
             raise ValueError("Anthropic API key (ANTHROPIC_API_KEY) is missing from the .env file.")
         if not self.GEMINI_API_KEY:
             raise ValueError("Google API key (GOOGLE_API_KEY) is missing from the .env file.")
+        if not self.MISTRAL_API_KEY:
+            raise ValueError("Mistral API key (MISTRAL_API_KEY) is missing from the .env file.")
 
     @classmethod
     def get_instance(cls) -> "LLMConfig":

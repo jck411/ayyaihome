@@ -86,6 +86,58 @@ async def validate_and_prepare_for_anthropic(request: Request):
     return messages
 
 
+async def validate_and_prepare_for_mistral_completion(request: Request):
+    """
+    Validates the incoming request and prepares messages for Mistral's API.
+    """
+    data = await request.json()
+    messages = data.get('messages')
+
+    # Validate that 'messages' is a list
+    if not isinstance(messages, list):
+        raise HTTPException(status_code=400, detail="'messages' must be a list.")
+
+    prepared_messages = []
+
+    # Validate each message structure
+    for idx, msg in enumerate(messages):
+        if not isinstance(msg, dict):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Message at index {idx} must be a dictionary."
+            )
+        role = msg.get("role")
+        content = msg.get("content")
+
+        if not role or not isinstance(role, str):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Message at index {idx} must have a 'role' field of type string."
+            )
+        if not content or not isinstance(content, str):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Message at index {idx} must have a 'content' field of type string."
+            )
+        if role not in {"user", "assistant", "system"}:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid 'role' value at index {idx}. Must be 'user', 'assistant', or 'system'."
+            )
+
+        prepared_messages.append({"role": role, "content": content})
+
+    # Optionally: Insert a system message as a first message if not present
+    if not any(msg['role'] == 'system' for msg in prepared_messages):
+        system_message = {"role": "system", "content": "You are a knowledgeable assistant."}
+        prepared_messages.insert(0, system_message)
+
+    return prepared_messages
+
+
+
+
+
 from fastapi import Request
 
 async def validate_and_prepare_for_google_completion(request: Request):
