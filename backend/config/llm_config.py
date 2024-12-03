@@ -115,6 +115,17 @@ class LLMConfig:
         self.OPENROUTER_STREAM_OPTIONS = openrouter_config.get('STREAM_OPTIONS', {"include_usage": True})
         self.OPENROUTER_MODALITIES = openrouter_config.get('MODALITIES', ["text"])
 
+                # Groq Configuration
+        groq_config = llm_config.get('GROQ', {})
+        self.GROQ_API_KEY = os.getenv("GROQ_API_KEY")  # Fetch from environment variable
+        self.GROQ_API_BASE = groq_config.get('API_BASE', "https://api.groq.com/openai/v1")  # Default API base
+        self.GROQ_RESPONSE_MODEL = groq_config.get('RESPONSE_MODEL', "llama3-8b-8192")
+        self.GROQ_TEMPERATURE = groq_config.get('TEMPERATURE', 0.7)
+        self.GROQ_TOP_P = groq_config.get('TOP_P', 0.9)
+        self.GROQ_SYSTEM_PROMPT = groq_config.get('SYSTEM_PROMPT', "You are a witty and creative assistant.")
+        self.GROQ_MAX_TOKENS = groq_config.get('MAX_TOKENS', 2000)
+        self.GROQ_STREAM_OPTIONS = groq_config.get('STREAM_OPTIONS', {"include_usage": True})
+        self.GROQ_STOP = groq_config.get('STOP', None)
 
         # Validate critical fields
         if not self.OPENAI_API_KEY:
@@ -131,6 +142,9 @@ class LLMConfig:
             raise ValueError("DeepInfra API key (DEEPINFRA_TOKEN) is missing from the .env file.")
         if not self.OPENROUTER_API_KEY:
             raise ValueError("OpenRouter API key (OPENROUTER_API_KEY) is missing from the .env file.")
+        if not self.GROQ_API_KEY:
+            raise ValueError("Groq API key (GROQ_API_KEY) is missing from the .env file.")
+
 
     @classmethod
     def get_instance(cls) -> "LLMConfig":

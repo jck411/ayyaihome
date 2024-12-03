@@ -1,6 +1,7 @@
 from typing import Optional
 from mistralai import Mistral
 from openai import AsyncOpenAI
+from groq import AsyncGroq
 from anthropic import AsyncAnthropic
 from azure.cognitiveservices.speech import SpeechConfig
 
@@ -176,3 +177,26 @@ def get_openrouter_client(api_key: Optional[str] = None) -> AsyncOpenAI:
 
     # Return the configured OpenRouter client
     return AsyncOpenAI(api_key=api_key, base_url=base_url)
+
+
+def get_groq_client(api_key: str = None) -> AsyncGroq:
+    """
+    Creates a GROQ client.
+
+    Args:
+        api_key (str, optional): GROQ API key. Defaults to the value in Config.
+
+    Returns:
+        AsyncGroq: Configured GROQ client.
+    """
+    from backend.config import Config  # Delayed import to avoid circular dependency
+
+    if api_key is None:
+        api_key = Config.GROQ_API_KEY
+
+    if not api_key:
+        raise ValueError("GROQ API key is not set.")
+
+    # Return the configured AsyncGroq client
+    return AsyncGroq(api_key=api_key)
+
