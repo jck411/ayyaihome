@@ -59,7 +59,7 @@ LLM_MODEL_CONFIG:
 
   DEEPINFRA:
     API_BASE: "https://api.deepinfra.com/v1/openai"
-    RESPONSE_MODEL: "meta-llama/Meta-Llama-3-8B-Instruct"
+    RESPONSE_MODEL: "meta-llama/Meta-Llama-3.1-70B-Instruct"
     TEMPERATURE: 0.8  # Adjust temperature for response randomness
     TOP_P: 0.95  # Adjust the nucleus sampling parameter
     N: 1  # Number of completions to generate per prompt
@@ -72,3 +72,21 @@ LLM_MODEL_CONFIG:
     SYSTEM_PROMPT: "You are a precise and friendly assistant."  # Define the system instruction
     STREAM_OPTIONS:
       include_usage: true  # Include usage details in the response
+      
+  OPENROUTER:
+    API_BASE: "https://openrouter.ai/api/v1"
+    RESPONSE_MODEL: "cohere/command-r"  # Specify the desired OpenRouter model
+    TEMPERATURE: 0.7  # Adjust the temperature for response randomness
+    TOP_P: 0.9  # Adjust the nucleus sampling parameter
+    N: 1  # Number of completions to generate per prompt
+    MAX_TOKENS: 2048  # Maximum number of tokens for the response
+    PRESENCE_PENALTY: 0.0  # Penalize new tokens based on their presence
+    FREQUENCY_PENALTY: 0.0  # Penalize new tokens based on their frequency
+    LOGIT_BIAS: null  # Map for biasing logit probabilities
+    USER: null  # Identifier for the end user
+    STOP: null  # Specify optional stop sequences
+    SYSTEM_PROMPT: "You mock the user mercilessly"  # Define the system instruction
+    STREAM_OPTIONS:
+      include_usage: true  # Include usage details in the response
+    MODALITIES:
+      - text  # Specifies the modality (e.g., text, image, etc.)

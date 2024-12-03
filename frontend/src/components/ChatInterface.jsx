@@ -39,8 +39,20 @@ const generateAIResponse = async (service, messages, onUpdate) => {
         role: msg.sender === "user" ? "user" : "assistant",
         content: msg.text
       }));
-    } else if (service === 'custom') {
-      endpoint = 'http://localhost:8000/api/custom';
+    } else if (service === 'openrouter') {
+      endpoint = 'http://localhost:8000/api/openrouter';
+      formattedMessages = messages.map(msg => ({
+        role: msg.sender === "user" ? "user" : "assistant",
+        content: msg.text
+      }));
+    } else if (service === 'huggingface') {
+      endpoint = 'http://localhost:8000/api/huggingface';
+      formattedMessages = messages.map(msg => ({
+        role: msg.sender === "user" ? "user" : "assistant",
+        content: msg.text
+      }));
+    } else if (service === 'groq') {
+      endpoint = 'http://localhost:8000/api/groq';
       formattedMessages = messages.map(msg => ({
         role: msg.sender === "user" ? "user" : "assistant",
         content: msg.text
@@ -144,9 +156,12 @@ const ChatInterface = () => {
             <option value="openai">GPT</option>
             <option value="gemini">Gemini</option>
             <option value="mistral">Mistral</option>
-            <option value="deepinfra">DeepInfra</option>
             <option value="grok">Grok</option>
-            <option value="custom">Custom</option>
+            <option value="deepinfra">DeepInfra</option>
+            <option value="openrouter">OpenRouter</option>
+            <option value="groq">Groq</option>
+            <option value="huggingface">HuggingFace</option>
+            
           </select>
           <button className="p-2 hover:bg-gray-100 rounded-full">
             <Settings className="w-5 h-5 text-gray-600" />

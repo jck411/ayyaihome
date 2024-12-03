@@ -81,6 +81,7 @@ class LLMConfig:
 
         # DeepInfra Configuration
         deepinfra_config = llm_config.get('DEEPINFRA', {})
+        self.DEEPINFRA_API_KEY = os.getenv("DEEPINFRA_TOKEN")
         self.DEEPINFRA_API_BASE = deepinfra_config.get('API_BASE', "https://api.deepinfra.com/v1/openai")
         self.DEEPINFRA_RESPONSE_MODEL = deepinfra_config.get('RESPONSE_MODEL', "meta-llama/Meta-Llama-3-8B-Instruct")
         self.DEEPINFRA_TEMPERATURE = deepinfra_config.get('TEMPERATURE', 0.8)
@@ -95,8 +96,25 @@ class LLMConfig:
         self.DEEPINFRA_SYSTEM_PROMPT = deepinfra_config.get('SYSTEM_PROMPT', "You are a precise and friendly assistant.")
         self.DEEPINFRA_STREAM_OPTIONS = deepinfra_config.get('STREAM_OPTIONS', {"include_usage": True})
 
-        # Fetch DeepInfra API key from the environment variable
-        self.DEEPINFRA_API_KEY = os.getenv("DEEPINFRA_TOKEN")
+      
+        # OpenRouter Configuration
+        openrouter_config = llm_config.get('OPENROUTER', {})
+        self.OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+        self.OPENROUTER_API_BASE = openrouter_config.get('API_BASE', "https://openrouter.ai/api/v1")
+        self.OPENROUTER_RESPONSE_MODEL = openrouter_config.get('RESPONSE_MODEL', "gpt-4o-mini")
+        self.OPENROUTER_TEMPERATURE = openrouter_config.get('TEMPERATURE', 0.7)
+        self.OPENROUTER_TOP_P = openrouter_config.get('TOP_P', 0.9)
+        self.OPENROUTER_N = openrouter_config.get('N', 1)
+        self.OPENROUTER_MAX_TOKENS = openrouter_config.get('MAX_TOKENS', 2048)
+        self.OPENROUTER_PRESENCE_PENALTY = openrouter_config.get('PRESENCE_PENALTY', 0.0)
+        self.OPENROUTER_FREQUENCY_PENALTY = openrouter_config.get('FREQUENCY_PENALTY', 0.0)
+        self.OPENROUTER_LOGIT_BIAS = openrouter_config.get('LOGIT_BIAS', None)
+        self.OPENROUTER_USER = openrouter_config.get('USER', None)
+        self.OPENROUTER_STOP = openrouter_config.get('STOP', None)
+        self.OPENROUTER_SYSTEM_PROMPT = openrouter_config.get('SYSTEM_PROMPT', "You are a helpful and thoughtful assistant.")
+        self.OPENROUTER_STREAM_OPTIONS = openrouter_config.get('STREAM_OPTIONS', {"include_usage": True})
+        self.OPENROUTER_MODALITIES = openrouter_config.get('MODALITIES', ["text"])
+
 
         # Validate critical fields
         if not self.OPENAI_API_KEY:
@@ -111,7 +129,8 @@ class LLMConfig:
             raise ValueError("Grok API key (GROK_API_KEY) is missing from the .env file.")
         if not self.DEEPINFRA_API_KEY:
             raise ValueError("DeepInfra API key (DEEPINFRA_TOKEN) is missing from the .env file.")
-
+        if not self.OPENROUTER_API_KEY:
+            raise ValueError("OpenRouter API key (OPENROUTER_API_KEY) is missing from the .env file.")
 
     @classmethod
     def get_instance(cls) -> "LLMConfig":

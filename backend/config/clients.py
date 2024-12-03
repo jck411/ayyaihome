@@ -140,11 +140,39 @@ def get_deepinfra_client(api_key: str = None) -> AsyncOpenAI:
     """
     from backend.config import Config  # Delayed import to avoid circular dependency
 
+    # Use the provided API key or retrieve it from Config
     if api_key is None:
         api_key = Config.DEEPINFRA_API_KEY
 
+    # Validate that the API key is set
     if not api_key:
-        raise ValueError("DeepInfra API key is not set.")
+        raise ValueError("DeepInfra API key (DEEPINFRA_TOKEN) is not set. Ensure it is available in the .env file.")
 
+    # Retrieve the API base URL from Config
     base_url = Config.DEEPINFRA_API_BASE
+
+    # Return the configured DeepInfra client
+    return AsyncOpenAI(api_key=api_key, base_url=base_url)
+
+def get_openrouter_client(api_key: Optional[str] = None) -> AsyncOpenAI:
+    """
+    Creates an OpenRouter client.
+
+    Args:
+        api_key (str, optional): OpenRouter API key. Defaults to the value in Config.
+
+    Returns:
+        AsyncOpenAI: Configured OpenRouter client.
+    """
+    # Delayed import to avoid circular dependency
+    if api_key is None:
+        api_key = Config.OPENROUTER_API_KEY
+
+    if not api_key:
+        raise ValueError("OpenRouter API key (OPENROUTER_API_KEY) is not set. Ensure it is available in the .env file.")
+
+    # Retrieve the API base URL from Config
+    base_url = Config.OPENROUTER_API_BASE
+
+    # Return the configured OpenRouter client
     return AsyncOpenAI(api_key=api_key, base_url=base_url)
