@@ -79,6 +79,25 @@ class LLMConfig:
         self.GROK_STREAM_OPTIONS = grok_config.get('STREAM_OPTIONS', {"include_usage": True})
         self.GROK_STOP = grok_config.get('STOP', None)
 
+        # DeepInfra Configuration
+        deepinfra_config = llm_config.get('DEEPINFRA', {})
+        self.DEEPINFRA_API_BASE = deepinfra_config.get('API_BASE', "https://api.deepinfra.com/v1/openai")
+        self.DEEPINFRA_RESPONSE_MODEL = deepinfra_config.get('RESPONSE_MODEL', "meta-llama/Meta-Llama-3-8B-Instruct")
+        self.DEEPINFRA_TEMPERATURE = deepinfra_config.get('TEMPERATURE', 0.8)
+        self.DEEPINFRA_TOP_P = deepinfra_config.get('TOP_P', 0.95)
+        self.DEEPINFRA_N = deepinfra_config.get('N', 1)
+        self.DEEPINFRA_MAX_TOKENS = deepinfra_config.get('MAX_TOKENS', 2048)
+        self.DEEPINFRA_PRESENCE_PENALTY = deepinfra_config.get('PRESENCE_PENALTY', 0.0)
+        self.DEEPINFRA_FREQUENCY_PENALTY = deepinfra_config.get('FREQUENCY_PENALTY', 0.0)
+        self.DEEPINFRA_LOGIT_BIAS = deepinfra_config.get('LOGIT_BIAS', None)
+        self.DEEPINFRA_USER = deepinfra_config.get('USER', None)
+        self.DEEPINFRA_STOP = deepinfra_config.get('STOP', None)
+        self.DEEPINFRA_SYSTEM_PROMPT = deepinfra_config.get('SYSTEM_PROMPT', "You are a precise and friendly assistant.")
+        self.DEEPINFRA_STREAM_OPTIONS = deepinfra_config.get('STREAM_OPTIONS', {"include_usage": True})
+
+        # Fetch DeepInfra API key from the environment variable
+        self.DEEPINFRA_API_KEY = os.getenv("DEEPINFRA_TOKEN")
+
         # Validate critical fields
         if not self.OPENAI_API_KEY:
             raise ValueError("OpenAI API key (OPENAI_API_KEY) is missing from the .env file.")
@@ -90,6 +109,9 @@ class LLMConfig:
             raise ValueError("Mistral API key (MISTRAL_API_KEY) is missing from the .env file.")
         if not self.GROK_API_KEY:
             raise ValueError("Grok API key (GROK_API_KEY) is missing from the .env file.")
+        if not self.DEEPINFRA_API_KEY:
+            raise ValueError("DeepInfra API key (DEEPINFRA_TOKEN) is missing from the .env file.")
+
 
     @classmethod
     def get_instance(cls) -> "LLMConfig":

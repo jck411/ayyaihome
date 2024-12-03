@@ -127,3 +127,24 @@ def get_grok_client(api_key: str = None) -> AsyncOpenAI:
 
     base_url = Config.GROK_API_BASE
     return AsyncOpenAI(api_key=api_key, base_url=base_url)
+
+def get_deepinfra_client(api_key: str = None) -> AsyncOpenAI:
+    """
+    Creates a DeepInfra client.
+
+    Args:
+        api_key (str, optional): DeepInfra API key. Defaults to the value in Config.
+
+    Returns:
+        AsyncOpenAI: Configured DeepInfra client.
+    """
+    from backend.config import Config  # Delayed import to avoid circular dependency
+
+    if api_key is None:
+        api_key = Config.DEEPINFRA_API_KEY
+
+    if not api_key:
+        raise ValueError("DeepInfra API key is not set.")
+
+    base_url = Config.DEEPINFRA_API_BASE
+    return AsyncOpenAI(api_key=api_key, base_url=base_url)

@@ -27,8 +27,8 @@ const generateAIResponse = async (service, messages, onUpdate) => {
         role: msg.sender === "user" ? "user" : "assistant",
         content: msg.text
       }));
-    } else if (service === 'llama') {
-      endpoint = 'http://localhost:8000/api/llama';
+    } else if (service === 'deepinfra') {
+      endpoint = 'http://localhost:8000/api/deepinfra';
       formattedMessages = messages.map(msg => ({
         role: msg.sender === "user" ? "user" : "assistant",
         content: msg.text
@@ -144,7 +144,7 @@ const ChatInterface = () => {
             <option value="openai">GPT</option>
             <option value="gemini">Gemini</option>
             <option value="mistral">Mistral</option>
-            <option value="llama">Llama</option>
+            <option value="deepinfra">DeepInfra</option>
             <option value="grok">Grok</option>
             <option value="custom">Custom</option>
           </select>

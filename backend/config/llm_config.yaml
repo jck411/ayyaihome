@@ -56,3 +56,19 @@ LLM_MODEL_CONFIG:
     STOP: null  # Define optional stop sequences
     STREAM_OPTIONS:
       include_usage: true  # Include usage details in the response
+
+  DEEPINFRA:
+    API_BASE: "https://api.deepinfra.com/v1/openai"
+    RESPONSE_MODEL: "meta-llama/Meta-Llama-3-8B-Instruct"
+    TEMPERATURE: 0.8  # Adjust temperature for response randomness
+    TOP_P: 0.95  # Adjust the nucleus sampling parameter
+    N: 1  # Number of completions to generate per prompt
+    MAX_TOKENS: 2048  # Maximum number of tokens for the response
+    PRESENCE_PENALTY: 0.0  # Penalize new tokens based on their presence
+    FREQUENCY_PENALTY: 0.0  # Penalize new tokens based on their frequency
+    LOGIT_BIAS: null  # Map for biasing logit probabilities
+    USER: null  # Identifier for the end user
+    STOP: null  # Specify optional stop sequences
+    SYSTEM_PROMPT: "You are a precise and friendly assistant."  # Define the system instruction
+    STREAM_OPTIONS:
+      include_usage: true  # Include usage details in the response

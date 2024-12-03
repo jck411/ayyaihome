@@ -9,6 +9,7 @@ from backend.text_generation.anthropic_chat_completions import stream_anthropic_
 from backend.text_generation.google_chat_completions import stream_google_completion
 from backend.text_generation.mistral_chat_completions import stream_mistral_completion
 from backend.text_generation.grok_chat_completions import stream_grok_completion
+from backend.text_generation.deepinfra_chat_completions import stream_deepinfra_completion
 
 from backend.stream_processing import process_streams
 from backend.utils.request_utils import (
@@ -17,6 +18,7 @@ from backend.utils.request_utils import (
     validate_and_prepare_for_google_completion,
     validate_and_prepare_for_mistral_completion,
     validate_and_prepare_for_grok_completion,
+    validate_and_prepare_for_deepinfra,
 )
 
 logger = logging.getLogger(__name__)
@@ -195,4 +197,39 @@ async def grok_stream(request: Request):
 
     except Exception as e:
         logger.error(f"Error in grok_stream: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {e}")
+    
+    
+@router.post("/api/deepinfra")
+async def deepinfra_stream(request: Request):
+    """
+    Endpoint for handling chat requests with DeepInfra's API.
+    """
+    try:
+        # Validate and prepare messages for DeepInfra
+        messages = await validate_and_prepare_for_deepinfra(request)
+
+        # Initialize asynchronous queues
+        phrase_queue = asyncio.Queue()
+        audio_queue = asyncio.Queue()
+
+        # Start the process_streams task to handle real-time streaming
+        asyncio.create_task(
+            process_streams(
+                phrase_queue=phrase_queue,
+                audio_queue=audio_queue,
+            )
+        )
+
+        # Return the streaming response
+        return StreamingResponse(
+            stream_deepinfra_completion(
+                messages=messages,
+                phrase_queue=phrase_queue,
+            ),
+            media_type="text/plain",
+        )
+
+    except Exception as e:
+        logger.error(f"Error in deepinfra_stream: {e}")
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {e}")
