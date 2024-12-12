@@ -302,11 +302,6 @@ async def validate_and_prepare_for_openrouter(request: Request):
 
         prepared_messages.append({"role": role, "content": content})
 
-    # Optionally: Insert a system message at the start if not present
-    if not any(msg['role'] == 'system' for msg in prepared_messages):
-        system_message = {"role": "system", "content": "You are a helpful assistant."}
-        prepared_messages.insert(0, system_message)
-
     return prepared_messages
 
 from fastapi import HTTPException, Request
