@@ -18,7 +18,8 @@ functions = [
                 },
                 "format": {
                     "type": "string",
-                    "description": "The format for the date or time (e.g., 24-hour, 12-hour, MM/DD/YYYY, YYYY-MM-DD)."
+                    "description": "The format for the date or time (e.g., 24-hour, 12-hour, MM/DD/YYYY, YYYY-MM-DD).",
+                    "enum": ["24-hour", "12-hour", "MM/DD/YYYY", "YYYY-MM-DD", "DD/MM/YYYY"]
                 },
                 "date_shift": {
                     "type": "integer",
@@ -30,10 +31,13 @@ functions = [
                     "enum": ["time", "date", "both"]
                 }
             },
-            "required": []
+            "required": ["response_type"],
+            "additionalProperties": False,
+            "strict": True
         }
     }
 ]
+
 
 def get_time(
     timezone="America/New_York",
