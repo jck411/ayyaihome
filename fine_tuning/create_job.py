@@ -36,13 +36,7 @@ async def main():
         file=open("/home/jack/ayyaihome/fine_tuning/files/marv_fine_tune_test.jsonl", "rb"),
         purpose="fine-tune"
     )
-
-    # Create a fine-tuning job using the uploaded training data
-    simple_ft_job = await aclient.fine_tuning.jobs.create(
-        training_file=train_set_file.id, 
-        model="gpt-4o-mini-2024-07-18"
-    )
-
+    
     # Create a fine-tuning job with additional parameters
     all_params_ft_job = await aclient.fine_tuning.jobs.create(
         model="gpt-4o-mini-2024-07-18",

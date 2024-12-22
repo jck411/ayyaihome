@@ -1,0 +1,1 @@
+{"_step":0,"_wandb":{"runtime":2},"error":"Error code: 400 - {'error': {'message': 'Field required', 'type': 'invalid_request_error', 'param': None, 'code': None}}","_timestamp":1.7344586389005783e+09,"_runtime":2.356541206}
