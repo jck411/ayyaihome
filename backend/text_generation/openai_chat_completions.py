@@ -1,5 +1,6 @@
+# /home/jack/ayyaihome/backend/text_generation/openai_chat_completions.py
+
 import asyncio
-import logging
 import json
 import re
 from typing import Any, AsyncIterator, Dict, List, Optional, Sequence, Union
@@ -7,22 +8,25 @@ from typing import Any, AsyncIterator, Dict, List, Optional, Sequence, Union
 from fastapi import HTTPException
 from openai import AsyncOpenAI
 
+# Local imports
+from .logging_config import logger
+from .function_call_handler import (
+    _stream_response_and_detect_function_call,
+    FunctionCallDetected,
+)
+from .function_dispatcher import _call_function_locally
+
+# Your config imports
 from backend.config import Config
 from backend.config.clients import get_openai_client
-from backend.functions.function_schemas import functions, get_time  # <-- ADDED FOR FUNCTION CALL
 
-# ==========================
-# Logging Configuration
-# ==========================
-logging.basicConfig(
-    level=logging.INFO,  # Set to DEBUG to capture all levels of logs
-    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
-    handlers=[
-        logging.StreamHandler()  # Logs will be output to the terminal
-    ]
-)
+# Import schemas from modularized files
+from backend.functions.get_weather import get_weather_schema
+from backend.functions.get_time import get_time_schema
 
-logger = logging.getLogger(__name__)
+# Assemble the functions list
+functions = [get_weather_schema, get_time_schema]
+
 
 def extract_content_from_openai_chunk(chunk: Any) -> Optional[str]:
     """
@@ -37,6 +41,7 @@ def extract_content_from_openai_chunk(chunk: Any) -> Optional[str]:
         logger.warning(f"Unexpected chunk format: {chunk}. Error: {e}")
         return None
 
+
 def compile_delimiter_pattern(delimiters: List[str]) -> Optional[re.Pattern]:
     """
     Compiles a regex pattern to match any of the provided delimiters.
@@ -50,6 +55,7 @@ def compile_delimiter_pattern(delimiters: List[str]) -> Optional[re.Pattern]:
     pattern = re.compile("|".join(escaped_delimiters))
     logger.debug(f"Compiled delimiter pattern: {pattern.pattern}")
     return pattern
+
 
 async def process_chunks(
     chunk_queue: asyncio.Queue,
@@ -100,102 +106,9 @@ async def process_chunks(
                             break
                     else:
                         break
+
     logger.info("Exiting process_chunks coroutine.")
 
-class FunctionCallDetected(Exception):
-    """
-    Raised when a GPT function_call finish_reason is encountered.
-    """
-    def __init__(self, info_dict):
-        super().__init__("Function call detected")
-        self.info = info_dict
-
-async def _stream_response_and_detect_function_call(response, chunk_queue: asyncio.Queue) -> AsyncIterator[str]:
-    """
-    Streams OpenAI response data while detecting and responding to function calls.
-    """
-    logger.info("Started _stream_response_and_detect_function_call coroutine.")
-    full_text = ""
-    function_name = None
-    function_args_accumulator = ""
-    function_call_finished = False
-
-    try:
-        async for chunk in response:
-            logger.debug(f"Streaming chunk received: {chunk}")
-            # Enqueue chunk for TTS segmentation
-            await chunk_queue.put(chunk)
-
-            delta = chunk.choices[0].delta
-
-            # Check for text content
-            if hasattr(delta, "content") and delta.content:
-                logger.debug(f"Yielding text chunk: {delta.content}")
-                yield delta.content
-                full_text += delta.content
-
-            # Check for function call
-            if hasattr(delta, "function_call") and delta.function_call is not None:
-                if delta.function_call.name:
-                    function_name = delta.function_call.name
-                    logger.info(f"Function call detected: {function_name}")
-                if delta.function_call.arguments:
-                    function_args_accumulator += delta.function_call.arguments
-                    logger.debug(f"Accumulated function arguments: {function_args_accumulator}")
-
-            # If the finish reason is "function_call", raise an exception 
-            if chunk.choices[0].finish_reason == "function_call":
-                function_call_finished = True
-                logger.info("Function call finish_reason detected. Raising FunctionCallDetected exception.")
-                raise FunctionCallDetected({
-                    "full_text": full_text,
-                    "function_name": function_name,
-                    "function_args": function_args_accumulator,
-                    "function_call_finished": function_call_finished
-                })
-    except Exception as e:
-        logger.error(f"Error in _stream_response_and_detect_function_call: {e}", exc_info=True)
-        raise
-    finally:
-        logger.info("Exiting _stream_response_and_detect_function_call coroutine.")
-
-async def _call_function_locally(function_name: str, arguments: dict) -> str:
-    """
-    Dispatches the detected function call to a local Python function by name.
-    """
-    logger.info(f"Calling local function '{function_name}' with arguments: {arguments}")
-    try:
-        if function_name == "get_time":
-            timezone = arguments.get("timezone", "America/New_York")
-            format_value = arguments.get("format", "12-hour")
-            date_shift = arguments.get("date_shift", 0)
-            response_type = arguments.get("response_type", "both")
-
-            # Decide how to interpret 'format'
-            time_format = "12-hour"
-            date_format = "MM/DD/YYYY"
-
-            if format_value in ["12-hour", "24-hour"]:
-                time_format = format_value
-            elif format_value in ["MM/DD/YYYY", "YYYY-MM-DD", "DD/MM/YYYY"]:
-                date_format = format_value
-
-            result = get_time(
-                timezone=timezone,
-                time_format=time_format,
-                date_format=date_format,
-                date_shift=date_shift,
-                response_type=response_type,
-            )
-            logger.debug(f"Function 'get_time' returned: {result}")
-            return result
-
-        # Fallback or unknown function
-        logger.warning(f"No suitable function found or function '{function_name}' not implemented.")
-        return "No suitable function found or function not implemented."
-    except Exception as e:
-        logger.error(f"Error while calling function '{function_name}': {e}", exc_info=True)
-        return "An error occurred while executing the function."
 
 async def stream_openai_completion(
     messages: Sequence[Dict[str, Union[str, Any]]],
@@ -207,6 +120,8 @@ async def stream_openai_completion(
     """
     logger.info("Started stream_openai_completion coroutine.")
     client = client or get_openai_client()
+
+    # Prepare TTS segmentation
     delimiters = Config.TTS_CONFIG.DELIMITERS
     use_segmentation = Config.TTS_CONFIG.USE_SEGMENTATION
     character_max = Config.TTS_CONFIG.CHARACTER_MAXIMUM
@@ -215,7 +130,7 @@ async def stream_openai_completion(
     # Create a queue to hold raw chunks
     chunk_queue = asyncio.Queue()
 
-    # Start the chunk processing task for TTS
+    # Start the chunk processing task
     logger.debug("Starting chunk_processor_task.")
     chunk_processor_task = asyncio.create_task(
         process_chunks(chunk_queue, phrase_queue, delimiter_pattern, use_segmentation, character_max)
@@ -232,12 +147,12 @@ async def stream_openai_completion(
             stream=True,
             temperature=Config.LLM_CONFIG.OPENAI_TEMPERATURE,
             top_p=Config.LLM_CONFIG.OPENAI_TOP_P,
-            functions=functions,            # <-- ADDED FOR FUNCTION CALL
-            function_call="auto",          # <-- ADDED FOR FUNCTION CALL
+            functions=functions,            # For function calls
+            function_call="auto",          # Auto-detect function calls
         )
         logger.info("OpenAI streaming response started (function_call=auto).")
 
-        # We'll manually catch StopAsyncIteration to know if there's a function call
+        # We'll manually catch the function call
         stream_generator = _stream_response_and_detect_function_call(response, chunk_queue)
         try:
             async for text_chunk in stream_generator:
@@ -245,7 +160,7 @@ async def stream_openai_completion(
                 yield text_chunk
 
         except FunctionCallDetected as exc:
-            # info dict about the function call
+            # Extract info about the function call
             info = exc.info
             function_call_finished = info.get("function_call_finished", False)
             function_name = info.get("function_name")
@@ -253,7 +168,7 @@ async def stream_openai_completion(
 
             logger.info(f"Handling function call: {function_name} with args: {function_args_str}")
 
-            # If there's a function call, parse arguments:
+            # If there's a function call, parse arguments
             if function_call_finished and function_name:
                 try:
                     arguments = json.loads(function_args_str) if function_args_str else {}
@@ -265,7 +180,7 @@ async def stream_openai_completion(
                 function_result = await _call_function_locally(function_name, arguments)
                 logger.info(f"Function '{function_name}' executed with result: {function_result}")
 
-                # Now build updated messages with the function result
+                # Build updated messages with the function result
                 updated_messages = list(messages) + [
                     {"role": "assistant", "content": info.get("full_text", "")},
                     {
@@ -311,7 +226,7 @@ async def stream_openai_completion(
         await chunk_queue.put(None)
         raise HTTPException(status_code=500, detail=f"OpenAI API error: {e}")
     finally:
-        # Signal chunk processor to close
+        # Signal the chunk processor to close
         logger.debug("Signaling chunk_processor_task to terminate.")
         await chunk_queue.put(None)
         await chunk_processor_task
