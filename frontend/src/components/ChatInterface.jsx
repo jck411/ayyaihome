@@ -1,6 +1,6 @@
 // ChatInterface.jsx
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Settings, Loader2, Mic, MicOff } from 'lucide-react';
+import { Send, Settings, Loader2, Mic, MicOff, Volume2, VolumeX } from 'lucide-react';
 
 const ChatInterface = () => {
   const [messages, setMessages] = useState([]);
@@ -201,10 +201,9 @@ const ChatInterface = () => {
             {isTogglingTTS ? (
               <Loader2 className="w-5 h-5 animate-spin text-gray-600" />
             ) : ttsEnabled ? (
-              // Replace with appropriate icons if needed
-              <span title="Backend TTS Enabled">🔊</span>
+              <Volume2 className="w-5 h-5 text-green-500" title="Backend TTS Enabled" />
             ) : (
-              <span title="Backend TTS Disabled">🔇</span>
+              <VolumeX className="w-5 h-5 text-gray-400" title="Backend TTS Disabled" />
             )}
           </button>
 
