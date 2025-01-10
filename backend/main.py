@@ -20,7 +20,6 @@ import azure.cognitiveservices.speech as speechsdk
 from queue import Queue
 import uvicorn
 
-
 # =====================================================================================
 # Load .env for your API keys:
 #   - OPENAI_API_KEY=<your openai key>
@@ -127,18 +126,6 @@ elif API_HOST == "openrouter":  # Then check for openrouter
     )
     DEPLOYMENT_NAME = CONFIG["API_SERVICES"]["openrouter"]["MODEL"]
 
-
-# ==================== FastAPI Setup ====================
-app = FastAPI()
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:3000", "*"],  # Merged CORS origins
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-router = APIRouter()
-
 # ==================== Helper Logging ====================
 def conditional_print(message: str, print_type: str = "default"):
     if print_type == "segment" and CONFIG["LOGGING"]["PRINT_SEGMENTS"]:
@@ -149,6 +136,59 @@ def conditional_print(message: str, print_type: str = "default"):
         print(message)
     elif CONFIG["LOGGING"]["PRINT_ENABLED"]:
         print(message)
+
+# ==================== Core Classes (STT Classes) ====================
+# ---------------- Azure STT Class ----------------
+class ContinuousSpeechRecognizer:
+    def __init__(self):
+        self.speech_key = os.getenv('AZURE_SPEECH_KEY')
+        self.speech_region = os.getenv('AZURE_SPEECH_REGION')
+        self.is_listening = False
+        self.speech_queue = Queue()
+        self.setup_recognizer()
+
+    def setup_recognizer(self):
+        if not self.speech_key or not self.speech_region:
+            raise ValueError("Azure Speech Key or Region is not set.")
+
+        speech_config = speechsdk.SpeechConfig(
+            subscription=self.speech_key,
+            region=self.speech_region
+        )
+        speech_config.speech_recognition_language = "en-US"  # Default language
+
+        audio_config = speechsdk.audio.AudioConfig(use_default_microphone=True)
+        self.speech_recognizer = speechsdk.SpeechRecognizer(
+            speech_config=speech_config,
+            audio_config=audio_config
+        )
+
+        self.speech_recognizer.recognized.connect(self.handle_final_result)
+
+    def handle_final_result(self, evt):
+        if evt.result.text and self.is_listening:
+            self.speech_queue.put(evt.result.text)
+
+    def start_listening(self):
+        if not self.is_listening:
+            self.is_listening = True
+            self.speech_recognizer.start_continuous_recognition()
+            print("Azure STT: Started listening.")
+
+    def pause_listening(self):
+        if self.is_listening:
+            self.is_listening = False
+            self.speech_recognizer.stop_continuous_recognition()
+            print("Azure STT: Paused listening.")
+
+    def get_speech_nowait(self):
+        try:
+            return self.speech_queue.get_nowait()
+        except:
+            return None
+
+# Single global instance
+stt_instance = ContinuousSpeechRecognizer()
 
 # ==================== Tools & Function Calls ====================
 def check_args(function: Callable, args: dict) -> bool:
@@ -171,8 +211,6 @@ def get_function_and_args(tool_call: dict, available_functions: dict) -> Tuple[C
     if not check_args(function_to_call, function_args):
         raise ValueError(f"Invalid arguments for function '{function_name}'")
     return function_to_call, function_args
-
-
 
 def fetch_weather(lat=28.5383, lon=-81.3792, exclude="minutely", units="metric", lang="en"):
     """
@@ -201,7 +239,6 @@ def fetch_weather(lat=28.5383, lon=-81.3792, exclude="minutely", units="metric",
     response = requests.get(url)
     response.raise_for_status()
     return response.json()
-
 
 def get_time(lat=28.5383, lon=-81.3792):
     """
@@ -290,12 +327,12 @@ def get_tools():
         }
     ]
 
-
 def get_available_functions():
     return { 
         "fetch_weather": fetch_weather,
         "get_time": get_time
     }
+
 # ==================== Audio Player & TTS ====================
 def audio_player_sync(audio_queue: asyncio.Queue, playback_rate: int, loop: asyncio.AbstractEventLoop):
     """
@@ -491,7 +528,6 @@ async def process_streams(phrase_queue: asyncio.Queue, audio_queue: asyncio.Queu
     except Exception as e:
         conditional_print(f"Error in process_streams: {e}")
 
-
 # ==================== Streaming Chat Logic ====================
 def extract_content_from_openai_chunk(chunk: Any) -> Optional[str]:
     try:
@@ -548,12 +584,12 @@ async def process_chunks(
                     else:
                         break
 
-
-
-async def validate_and_prepare_for_openai_completion(request: Request) -> List[Dict[str, Any]]:
-    data = await request.json()
-    messages = data.get('messages')
-    
+async def validate_messages_for_ws(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Validates and prepares messages for OpenAI completion.
+    This function replicates the logic from `validate_and_prepare_for_openai_completion`
+    but accepts messages directly instead of a Request object.
+    """
     if not isinstance(messages, list):
         raise HTTPException(status_code=400, detail="'messages' must be a list.")
 
@@ -583,7 +619,6 @@ async def validate_and_prepare_for_openai_completion(request: Request) -> List[D
     prepared.insert(0, system_prompt)
     
     return prepared
-
 
 async def stream_openai_completion(
     messages: Sequence[Dict[str, Union[str, Any]]],
@@ -675,153 +710,104 @@ async def stream_openai_completion(
         await chunk_queue.put(None)
         raise HTTPException(status_code=500, detail=f"OpenAI API error: {e}")
 
-
-
+# ==================== Frontend Endpoints ====================
+app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "*"],  # Merged CORS origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+router = APIRouter()
 
 @app.options("/api/options")
 async def openai_options():
     return Response(status_code=200)
 
-@app.post("/api/chat")
-async def chat_endpoint(request: Request):
+# ------------------- TTS Toggle Endpoint -------------------
+@app.post("/api/toggle-tts")
+async def toggle_tts():
     try:
-        # Validate and prepare messages
-        messages = await validate_and_prepare_for_openai_completion(request)
-        
-        # Create queues for text-to-speech processing
-        phrase_queue = asyncio.Queue()
-        audio_queue = asyncio.Queue()
-        
-        # Start the TTS processing in the background
-        process_streams_task = asyncio.create_task(process_streams(phrase_queue, audio_queue))
-        
-        # Create the streaming response
-        async def generate_response():
-            try:
-                async for content in stream_openai_completion(messages, phrase_queue):
-                    yield f"data: {json.dumps({'content': content})}\n\n"
-            finally:
-                # Signal end of processing
-                await phrase_queue.put(None)
-                await process_streams_task
-        
-        return StreamingResponse(
-            generate_response(),
-            media_type="text/event-stream",  # This indicates SSE
-            headers={
-                'Cache-Control': 'no-cache',
-                'Connection': 'keep-alive',
-                'Content-Type': 'text/event-stream',
-            }
-        )
-    
+        current_status = CONFIG["GENERAL_TTS"]["TTS_ENABLED"]
+        CONFIG["GENERAL_TTS"]["TTS_ENABLED"] = not current_status
+        return {"tts_enabled": CONFIG["GENERAL_TTS"]["TTS_ENABLED"]}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to toggle TTS: {str(e)}")
 
+# ---------------- Unified WebSocket Endpoint ----------------
+async def stream_stt_to_client(websocket: WebSocket):
+    while True:
+        recognized_text = stt_instance.get_speech_nowait()
+        if recognized_text:
+            # Send recognized STT text to client
+            await websocket.send_json({"stt_text": recognized_text})
+        await asyncio.sleep(0.05)
 
-
-# ---------------- Azure STT Class ----------------
-class ContinuousSpeechRecognizer:
-    def __init__(self):
-        self.speech_key = os.getenv('AZURE_SPEECH_KEY')
-        self.speech_region = os.getenv('AZURE_SPEECH_REGION')
-        self.is_listening = False
-        self.speech_queue = Queue()
-        self.setup_recognizer()
-
-    def setup_recognizer(self):
-        if not self.speech_key or not self.speech_region:
-            raise ValueError("Azure Speech Key or Region is not set.")
-
-        speech_config = speechsdk.SpeechConfig(
-            subscription=self.speech_key,
-            region=self.speech_region
-        )
-        speech_config.speech_recognition_language = "en-US"  # Default language
-
-        audio_config = speechsdk.audio.AudioConfig(use_default_microphone=True)
-        self.speech_recognizer = speechsdk.SpeechRecognizer(
-            speech_config=speech_config,
-            audio_config=audio_config
-        )
-
-        self.speech_recognizer.recognized.connect(self.handle_final_result)
-
-    def handle_final_result(self, evt):
-        if evt.result.text and self.is_listening:
-            self.speech_queue.put(evt.result.text)
-
-    def start_listening(self):
-        if not self.is_listening:
-            self.is_listening = True
-            self.speech_recognizer.start_continuous_recognition()
-            print("Azure STT: Started listening.")
-
-    def pause_listening(self):
-        if self.is_listening:
-            self.is_listening = False
-            self.speech_recognizer.stop_continuous_recognition()
-            print("Azure STT: Paused listening.")
-
-    def get_speech_nowait(self):
-        try:
-            return self.speech_queue.get_nowait()
-        except:
-            return None
-
-# Single global instance
-stt_instance = ContinuousSpeechRecognizer()
-
-# ---------------- Control Endpoints ----------------
-@app.post("/api/stt/start")
-async def api_start_stt():
-    try:
-        stt_instance.start_listening()
-        return {"is_listening": stt_instance.is_listening}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to start STT: {str(e)}")
-
-@app.post("/api/stt/pause")
-async def api_pause_stt():
-    try:
-        stt_instance.pause_listening()
-        return {"is_listening": stt_instance.is_listening}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to pause STT: {str(e)}")
-
-@app.get("/api/stt/status")
-async def get_stt_status():
-    return {"is_listening": stt_instance.is_listening}
-
-# ---------------- WebSocket Endpoint ----------------
-@app.websocket("/ws/stt")
-async def stt_websocket(websocket: WebSocket):
+@app.websocket("/ws/chat")
+async def unified_chat_websocket(websocket: WebSocket):
     await websocket.accept()
-    print("Client connected to /ws/stt")
+    print("Client connected to /ws/chat")
+
+    # Start a background task that streams recognized STT text
+    stt_task = asyncio.create_task(stream_stt_to_client(websocket))
+
     try:
         while True:
-            recognized_text = stt_instance.get_speech_nowait()
-            if recognized_text:
-                await websocket.send_text(recognized_text)
-            await asyncio.sleep(0.05)  # Prevent busy loop
+            # The client sends data as JSON (e.g., chat messages or STT commands)
+            data = await websocket.receive_json()
+            action = data.get("action")
+
+            if action == "start-stt":
+                stt_instance.start_listening()
+                await websocket.send_json({"is_listening": True})
+
+            elif action == "pause-stt":
+                stt_instance.pause_listening()
+                await websocket.send_json({"is_listening": False})
+
+            elif action == "chat":
+                # Client is requesting a GPT completion
+                messages = data.get("messages", [])
+                
+                # Validate & prepare the messages using the new function
+                validated = await validate_messages_for_ws(messages)
+
+                # Create queues for the chunk-processing + TTS
+                phrase_queue = asyncio.Queue()
+                audio_queue = asyncio.Queue()
+                
+                # Optionally launch TTS in background (same as your `process_streams`)
+                process_streams_task = asyncio.create_task(process_streams(phrase_queue, audio_queue))
+
+                # Stream the OpenAI completion and send chunks back to client
+                try:
+                    async for content in stream_openai_completion(validated, phrase_queue):
+                        # Each piece of content is sent over the same WebSocket
+                        await websocket.send_json({"content": content})
+                finally:
+                    # Signal TTS to stop
+                    await phrase_queue.put(None)
+                    await process_streams_task
+
     except WebSocketDisconnect:
-        print("Client disconnected from /ws/stt")
+        print("Client disconnected from /ws/chat")
     except Exception as e:
-        print(f"WebSocket error: {e}")
+        print(f"WebSocket error in unified_chat_websocket: {e}")
+    finally:
+        # Ensure we stop STT and cancel the background task
+        stt_task.cancel()
+        stt_instance.pause_listening()
+        await websocket.close()
 
-# ---------------- GPT Chat Endpoint ----------------
-# Note: The /api/chat endpoint from Code1 has been integrated above.
-# The placeholder from Code2 is replaced by Code1's chat logic.
-
-# ---------------- Startup Event ----------------
-@app.on_event("startup")
-async def startup_event():
-    # Optionally start STT on server startup
-    # stt_instance.start_listening()
-    pass
-
-# Include the router
+# ==================== Include Routers ====================
 app.include_router(router)
 
+# ==================== Main Execution ====================
 if __name__ == '__main__':
-    uvicorn.run(app, host='0.0.0.0', port=8000)
+    uvicorn.run(
+        "main:app",  # Replace with your script name if different
+        host="0.0.0.0",
+        port=8000,
+        reload=True  # Always enable auto-reload during development
+    )

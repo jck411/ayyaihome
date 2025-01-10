@@ -2,54 +2,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Send, Settings, Loader2, Mic, MicOff } from 'lucide-react';
 
-const generateAIResponse = async (messages, onContentStream) => {
-  try {
-    const endpoint = 'http://localhost:8000/api/chat';
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages })
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Request failed: ${errorText}`);
-    }
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder('utf-8');
-    let buffer = '';
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      
-      buffer += decoder.decode(value, { stream: true });
-      
-      // Split the buffer by newlines and process each complete line
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || ''; // Keep the last incomplete line in the buffer
-
-      for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          try {
-            const jsonStr = line.slice(6); // Remove 'data: ' prefix
-            const data = JSON.parse(jsonStr);
-            if (data.content) {
-              onContentStream(data.content);
-            }
-          } catch (e) {
-            console.error('Error parsing JSON:', e);
-          }
-        }
-      }
-    }
-  } catch (error) {
-    console.error('Error in generateAIResponse:', error);
-    throw error;
-  }
-};
-
 const ChatInterface = () => {
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
@@ -74,48 +26,72 @@ const ChatInterface = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // ------------------- FETCH INITIAL STT STATUS -------------------
+  // ------------------- WEBSOCKET for Unified Chat and STT -------------------
   useEffect(() => {
-    const fetchSttStatus = async () => {
-      try {
-        const response = await fetch('http://localhost:8000/api/stt/status');
-        if (response.ok) {
-          const data = await response.json();
-          setIsSttOn(data.is_listening);
-          console.log(`Initial STT status fetched: ${data.is_listening ? 'ON' : 'OFF'}`);
-        }
-      } catch (error) {
-        console.error('Error fetching STT status:', error);
-      }
-    };
-
-    fetchSttStatus();
-  }, []);
-
-  // ------------------- WEBSOCKET for AZURE STT from the SERVER -------------------
-  useEffect(() => {
-    // Open a WebSocket to receive recognized text from the server
-    const ws = new WebSocket('ws://localhost:8000/ws/stt'); // Adjust if SSL => wss://
+    // Open a WebSocket to communicate with the server
+    const ws = new WebSocket('ws://localhost:8000/ws/chat'); // Adjust if using SSL => wss://
     websocketRef.current = ws;
 
     ws.onopen = () => {
-      console.log('Connected to STT WebSocket');
+      console.log('Connected to Unified Chat WebSocket');
     };
 
     ws.onmessage = (event) => {
-      // Each message is recognized text from the server
-      const recognizedText = event.data;
-      console.log(`Received STT text: ${recognizedText}`);
-      // Append recognized text to sttTranscript
-      setSttTranscript((prev) => prev + recognizedText + ' ');
+      try {
+        const data = JSON.parse(event.data);
+
+        if (data.stt_text) {
+          // Received STT text from server
+          const recognizedText = data.stt_text;
+          console.log(`Received STT text: ${recognizedText}`);
+          setSttTranscript((prev) => prev + recognizedText + ' ');
+        }
+
+        if (data.content) {
+          // Received GPT chat content
+          const content = data.content;
+          console.log(`Received GPT content: ${content}`);
+          // Append the content to the last assistant message
+          setMessages((prev) => {
+            // Find the last assistant message
+            const lastIndex = prev.length - 1;
+            if (prev[lastIndex] && prev[lastIndex].sender === 'assistant') {
+              const updatedMessage = {
+                ...prev[lastIndex],
+                text: prev[lastIndex].text + content,
+              };
+              return [...prev.slice(0, lastIndex), updatedMessage];
+            } else {
+              // If no assistant message exists, create one
+              return [
+                ...prev,
+                {
+                  id: Date.now(),
+                  sender: 'assistant',
+                  text: content,
+                  timestamp: new Date().toLocaleTimeString(),
+                },
+              ];
+            }
+          });
+        }
+
+        if (data.is_listening !== undefined) {
+          // Received STT status update
+          setIsSttOn(data.is_listening);
+          console.log(`STT is now ${data.is_listening ? 'ON' : 'OFF'}`);
+        }
+      } catch (e) {
+        console.error('Error parsing WebSocket message:', e);
+      }
     };
 
     ws.onerror = (error) => {
-      console.error('STT WebSocket error:', error);
+      console.error('Unified Chat WebSocket error:', error);
     };
 
     ws.onclose = () => {
-      console.log('STT WebSocket closed');
+      console.log('Unified Chat WebSocket closed');
     };
 
     // Cleanup on unmount
@@ -151,19 +127,13 @@ const ChatInterface = () => {
     setIsTogglingSTT(true);
     try {
       if (!isSttOn) {
-        // Turn ON: call /api/stt/start
-        const resp = await fetch('http://localhost:8000/api/stt/start', { method: 'POST' });
-        if (!resp.ok) throw new Error('Failed to start STT');
-        const data = await resp.json();
-        setIsSttOn(data.is_listening);
-        console.log('STT turned ON');
+        // Turn ON: send "start-stt" action
+        websocketRef.current.send(JSON.stringify({ action: 'start-stt' }));
+        console.log('Sent action: start-stt');
       } else {
-        // Turn OFF: call /api/stt/pause
-        const resp = await fetch('http://localhost:8000/api/stt/pause', { method: 'POST' });
-        if (!resp.ok) throw new Error('Failed to pause STT');
-        const data = await resp.json();
-        setIsSttOn(data.is_listening);
-        console.log('STT turned OFF');
+        // Turn OFF: send "pause-stt" action
+        websocketRef.current.send(JSON.stringify({ action: 'pause-stt' }));
+        console.log('Sent action: pause-stt');
       }
     } catch (error) {
       console.error('Error toggling STT:', error);
@@ -180,12 +150,12 @@ const ChatInterface = () => {
       id: Date.now(),
       sender: 'user',
       text: userInput,
-      timestamp: new Date().toLocaleTimeString()
+      timestamp: new Date().toLocaleTimeString(),
     };
 
     setMessages((prev) => [...prev, newMessage]);
     setInputMessage('');
-    setSttTranscript(''); // Clear anything from the transcript now that it's "sent"
+    setSttTranscript(''); // Clear transcript since it's "sent"
 
     if (!isGenerating) {
       setIsGenerating(true);
@@ -197,21 +167,15 @@ const ChatInterface = () => {
             id: aiMessageId,
             sender: 'assistant',
             text: '',
-            timestamp: new Date().toLocaleTimeString()
-          }
+            timestamp: new Date().toLocaleTimeString(),
+          },
         ]);
 
-        await generateAIResponse([...messages, newMessage], (content) => {
-          // Append new content to the assistant's message
-          setMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === aiMessageId 
-                ? { ...msg, text: prev.find(m => m.id === aiMessageId).text + content }
-                : msg
-            )
-          );
-        });
-        
+        // Send chat action over WebSocket
+        websocketRef.current.send(
+          JSON.stringify({ action: 'chat', messages: [...messages, newMessage] })
+        );
+        console.log('Sent action: chat with messages:', [...messages, newMessage]);
       } catch (error) {
         console.error('Error sending message:', error);
       } finally {
@@ -232,15 +196,15 @@ const ChatInterface = () => {
             disabled={isTogglingTTS}
             className={`p-2 hover:bg-gray-100 rounded-full flex items-center gap-2 transition-all duration-200 
               ${isTogglingTTS ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-            title={ttsEnabled ? "Text-to-Speech Enabled" : "Text-to-Speech Disabled"}
+            title={ttsEnabled ? 'Text-to-Speech Enabled' : 'Text-to-Speech Disabled'}
           >
             {isTogglingTTS ? (
               <Loader2 className="w-5 h-5 animate-spin text-gray-600" />
             ) : ttsEnabled ? (
-              // Assuming Volume2 and VolumeX indicate backend TTS status
-              <span title="Backend TTS Enabled">🔊</span> // You can replace with appropriate icons
+              // Replace with appropriate icons if needed
+              <span title="Backend TTS Enabled">🔊</span>
             ) : (
-              <span title="Backend TTS Disabled">🔇</span> // You can replace with appropriate icons
+              <span title="Backend TTS Disabled">🔇</span>
             )}
           </button>
 
@@ -250,7 +214,7 @@ const ChatInterface = () => {
             disabled={isTogglingSTT}
             className={`p-2 hover:bg-gray-100 rounded-full flex items-center gap-2 transition-all duration-200 
               ${isTogglingSTT ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-            title={isSttOn ? "STT is ON. Click to Pause" : "STT is OFF. Click to Start"}
+            title={isSttOn ? 'STT is ON. Click to Pause' : 'STT is OFF. Click to Start'}
           >
             {isTogglingSTT ? (
               <Loader2 className="w-5 h-5 animate-spin text-gray-600" />
