@@ -518,6 +518,11 @@ async def process_streams(phrase_queue: asyncio.Queue, audio_queue: asyncio.Queu
             raise ValueError(f"Unsupported TTS provider: {provider}")
 
         loop = asyncio.get_running_loop()
+
+        # **Pause STT before starting TTS**
+        stt_instance.pause_listening()
+        conditional_print("STT paused before starting TTS.", "segment")
+
         # Start TTS in the background
         tts_task = asyncio.create_task(tts_processor(phrase_queue, audio_queue))
         # Start the audio player
@@ -525,9 +530,16 @@ async def process_streams(phrase_queue: asyncio.Queue, audio_queue: asyncio.Queu
         # Wait for both to complete
         await asyncio.gather(tts_task, audio_player_task)
 
+        # **Resume STT after TTS is done**
+        stt_instance.start_listening()
+        conditional_print("STT resumed after completing TTS.", "segment")
+
     except Exception as e:
         conditional_print(f"Error in process_streams: {e}")
+        # Ensure STT is resumed even if an error occurs
+        stt_instance.start_listening()
 
+        
 # ==================== Streaming Chat Logic ====================
 def extract_content_from_openai_chunk(chunk: Any) -> Optional[str]:
     try:
@@ -769,15 +781,20 @@ async def unified_chat_websocket(websocket: WebSocket):
             elif action == "chat":
                 # Client is requesting a GPT completion
                 messages = data.get("messages", [])
-                
+
                 # Validate & prepare the messages using the new function
                 validated = await validate_messages_for_ws(messages)
 
                 # Create queues for the chunk-processing + TTS
                 phrase_queue = asyncio.Queue()
                 audio_queue = asyncio.Queue()
-                
-                # Optionally launch TTS in background (same as your `process_streams`)
+
+                # **Pause STT before processing chat and starting TTS**
+                stt_instance.pause_listening()
+                await websocket.send_json({"stt_paused": True})
+                conditional_print("STT paused before processing chat.", "segment")
+
+                # Launch TTS and audio processing
                 process_streams_task = asyncio.create_task(process_streams(phrase_queue, audio_queue))
 
                 # Stream the OpenAI completion and send chunks back to client
@@ -789,6 +806,11 @@ async def unified_chat_websocket(websocket: WebSocket):
                     # Signal TTS to stop
                     await phrase_queue.put(None)
                     await process_streams_task
+
+                    # **Resume STT after chat and TTS processing is complete**
+                    stt_instance.start_listening()
+                    await websocket.send_json({"stt_resumed": True})
+                    conditional_print("STT resumed after processing chat.", "segment")
 
     except WebSocketDisconnect:
         print("Client disconnected from /ws/chat")
