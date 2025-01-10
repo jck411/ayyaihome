@@ -35,7 +35,7 @@ CONFIG = {
     # Toggle which chat completion provider you want:
     #   "openai" or "openrouter"
     "API_SETTINGS": {
-        "API_HOST": "openrouter"
+        "API_HOST": "openai"
     },
     "API_SERVICES": {
         "openai": {

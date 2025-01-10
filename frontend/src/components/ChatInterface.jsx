@@ -41,12 +41,35 @@ const ChatInterface = () => {
         const data = JSON.parse(event.data);
 
         if (data.stt_text) {
-          // Received STT text from server
-          const recognizedText = data.stt_text;
-          console.log(`Received STT text: ${recognizedText}`);
-          setSttTranscript((prev) => prev + recognizedText + ' ');
+          // 1) Insert recognized text into the messages list:
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: Date.now(),
+              sender: 'user',
+              text: data.stt_text,
+              timestamp: new Date().toLocaleTimeString(),
+            },
+          ]);
+        
+          // 2) Immediately call the "chat" action over WebSocket so GPT responds:
+          websocketRef.current.send(
+            JSON.stringify({
+              action: 'chat',
+              messages: [
+                // Use the entire message history plus this new user message
+                ...messages, 
+                {
+                  id: Date.now(),
+                  sender: 'user',
+                  text: data.stt_text,
+                  timestamp: new Date().toLocaleTimeString(),
+                }
+              ],
+            })
+          );
         }
-
+        
         if (data.content) {
           // Received GPT chat content
           const content = data.content;
