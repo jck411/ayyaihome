@@ -1,72 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Settings, Loader2 } from 'lucide-react';
 
-const generateAIResponse = async (service, messages, onUpdate) => {
+const generateAIResponse = async (messages, onUpdate) => {
   try {
-    let endpoint = '';
-    let formattedMessages = [];
-
-    if (service === 'anthropic') {
-      endpoint = 'http://localhost:8000/api/anthropic';
-      formattedMessages = messages.map(msg => ({
-        role: msg.sender === "user" ? "user" : "assistant",
-        content: msg.text
-      }));
-    } else if (service === 'openai') {
-      endpoint = 'http://localhost:8000/api/openai';
-      formattedMessages = messages;
-    } else if (service === 'gemini') {
-      endpoint = 'http://localhost:8000/api/google';
-      formattedMessages = messages.map(msg => ({
-        role: msg.sender === "user" ? "user" : "assistant",
-        content: msg.text
-      }));
-    } else if (service === 'mistral') {
-      endpoint = 'http://localhost:8000/api/mistral';
-      formattedMessages = messages.map(msg => ({
-        role: msg.sender === "user" ? "user" : "assistant",
-        content: msg.text
-      }));
-    } else if (service === 'deepinfra') {
-      endpoint = 'http://localhost:8000/api/deepinfra';
-      formattedMessages = messages.map(msg => ({
-        role: msg.sender === "user" ? "user" : "assistant",
-        content: msg.text
-      }));
-    } else if (service === 'grok') {
-      endpoint = 'http://localhost:8000/api/grok';
-      formattedMessages = messages.map(msg => ({
-        role: msg.sender === "user" ? "user" : "assistant",
-        content: msg.text
-      }));
-    } else if (service === 'openrouter') {
-      endpoint = 'http://localhost:8000/api/openrouter';
-      formattedMessages = messages.map(msg => ({
-        role: msg.sender === "user" ? "user" : "assistant",
-        content: msg.text
-      }));
-    } else if (service === 'huggingface') {
-      endpoint = 'http://localhost:8000/api/huggingface';
-      formattedMessages = messages.map(msg => ({
-        role: msg.sender === "user" ? "user" : "assistant",
-        content: msg.text
-      }));
-    } else if (service === 'groq') {
-      endpoint = 'http://localhost:8000/api/groq';
-      formattedMessages = messages.map(msg => ({
-        role: msg.sender === "user" ? "user" : "assistant",
-        content: msg.text
-      }));
-    } else {
-      throw new Error('Unsupported service selected');
-    }
+    const endpoint = 'http://localhost:8000/api/chat';
 
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ messages: formattedMessages })
+      body: JSON.stringify({ messages })
     });
 
     if (!response.ok) {
@@ -77,14 +21,32 @@ const generateAIResponse = async (service, messages, onUpdate) => {
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder('utf-8');
-    let fullContent = "";
+    let buffer = '';
 
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-      const content = decoder.decode(value, { stream: true });
-      fullContent += content;
-      onUpdate(fullContent);
+      
+      buffer += decoder.decode(value, { stream: true });
+      
+      // Process complete SSE messages
+      const lines = buffer.split('\n');
+      buffer = '';  // Reset buffer
+      
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const jsonData = JSON.parse(line.slice(5));
+            if (jsonData.content) {
+              onUpdate(prevText => prevText + jsonData.content);
+            }
+          } catch (e) {
+            console.error('Error parsing JSON:', e);
+          }
+        } else {
+          buffer += line + '\n';  // Add incomplete lines back to buffer
+        }
+      }
     }
   } catch (error) {
     console.error('Error in generateAIResponse:', error);
@@ -96,7 +58,6 @@ const ChatInterface = () => {
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedService, setSelectedService] = useState('anthropic');
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
@@ -130,9 +91,11 @@ const ChatInterface = () => {
         timestamp: new Date().toLocaleTimeString()
       }]);
 
-      await generateAIResponse(selectedService, [...messages, newMessage], (content) => {
+      await generateAIResponse([...messages, newMessage], (updateFn) => {
         setMessages(prev => prev.map(msg => 
-          msg.id === aiMessageId ? { ...msg, text: content } : msg
+          msg.id === aiMessageId
+           ? { ...msg, text: typeof updateFn === 'function' ? updateFn(msg.text) : updateFn }
+           : msg
         ));
       });
     } catch (error) {
@@ -147,22 +110,6 @@ const ChatInterface = () => {
       <div className="bg-white shadow-sm p-4 flex justify-between items-center">
         <h1 className="text-xl font-semibold text-gray-800">AYYAIHOME</h1>
         <div className="flex items-center gap-4">
-          <select
-            className="rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            value={selectedService}
-            onChange={(e) => setSelectedService(e.target.value)}
-          >
-            <option value="anthropic">Claude</option>
-            <option value="openai">GPT</option>
-            <option value="gemini">Gemini</option>
-            <option value="mistral">Mistral</option>
-            <option value="grok">Grok</option>
-            <option value="deepinfra">DeepInfra</option>
-            <option value="openrouter">OpenRouter</option>
-            <option value="groq">Groq</option>
-            <option value="huggingface">HuggingFace</option>
-            
-          </select>
           <button className="p-2 hover:bg-gray-100 rounded-full">
             <Settings className="w-5 h-5 text-gray-600" />
           </button>

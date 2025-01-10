@@ -1,1 +1,0 @@
-{"fine_tuning_job_id":"ftjob-yNmCLnwr1OpLPnOKRl4SU2do","training_file_id":"file-JCwQCjWYBc5CT4dfBV8RSr","validation_file_id":"file-UKKiWp7wEutH6LAMSewnYK","hyperparameters":"auto","model":"gpt-4o-mini-2024-07-18","_timestamp":1.7344767701589663e+09,"_step":0,"_runtime":4.131591498,"_wandb":{"runtime":4}}
