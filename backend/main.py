@@ -9,14 +9,16 @@ from datetime import datetime, timedelta, timezone
 from timezonefinder import TimezoneFinder
 import pytz
 from typing import Any, AsyncIterator, Callable, Dict, List, Optional, Sequence, Tuple, Union
-
-
-from fastapi import FastAPI, HTTPException, APIRouter, Request, Response
+import uuid
+import shutil
+from fastapi import FastAPI, HTTPException, APIRouter, Request, Response, File, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 import pyaudio
 from dotenv import load_dotenv
 import azure.cognitiveservices.speech as speechsdk
+from queue import Queue
+import uvicorn
 
 
 # =====================================================================================
@@ -130,7 +132,7 @@ elif API_HOST == "openrouter":  # Then check for openrouter
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:3000", "*"],  # Merged CORS origins
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -673,6 +675,9 @@ async def stream_openai_completion(
         await chunk_queue.put(None)
         raise HTTPException(status_code=500, detail=f"OpenAI API error: {e}")
 
+
+
+
 @app.options("/api/options")
 async def openai_options():
     return Response(status_code=200)
@@ -715,9 +720,108 @@ async def chat_endpoint(request: Request):
 
 
 
+# ---------------- Azure STT Class ----------------
+class ContinuousSpeechRecognizer:
+    def __init__(self):
+        self.speech_key = os.getenv('AZURE_SPEECH_KEY')
+        self.speech_region = os.getenv('AZURE_SPEECH_REGION')
+        self.is_listening = False
+        self.speech_queue = Queue()
+        self.setup_recognizer()
+
+    def setup_recognizer(self):
+        if not self.speech_key or not self.speech_region:
+            raise ValueError("Azure Speech Key or Region is not set.")
+
+        speech_config = speechsdk.SpeechConfig(
+            subscription=self.speech_key,
+            region=self.speech_region
+        )
+        speech_config.speech_recognition_language = "en-US"  # Default language
+
+        audio_config = speechsdk.audio.AudioConfig(use_default_microphone=True)
+        self.speech_recognizer = speechsdk.SpeechRecognizer(
+            speech_config=speech_config,
+            audio_config=audio_config
+        )
+
+        self.speech_recognizer.recognized.connect(self.handle_final_result)
+
+    def handle_final_result(self, evt):
+        if evt.result.text and self.is_listening:
+            self.speech_queue.put(evt.result.text)
+
+    def start_listening(self):
+        if not self.is_listening:
+            self.is_listening = True
+            self.speech_recognizer.start_continuous_recognition()
+            print("Azure STT: Started listening.")
+
+    def pause_listening(self):
+        if self.is_listening:
+            self.is_listening = False
+            self.speech_recognizer.stop_continuous_recognition()
+            print("Azure STT: Paused listening.")
+
+    def get_speech_nowait(self):
+        try:
+            return self.speech_queue.get_nowait()
+        except:
+            return None
+
+# Single global instance
+stt_instance = ContinuousSpeechRecognizer()
+
+# ---------------- Control Endpoints ----------------
+@app.post("/api/stt/start")
+async def api_start_stt():
+    try:
+        stt_instance.start_listening()
+        return {"is_listening": stt_instance.is_listening}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to start STT: {str(e)}")
+
+@app.post("/api/stt/pause")
+async def api_pause_stt():
+    try:
+        stt_instance.pause_listening()
+        return {"is_listening": stt_instance.is_listening}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to pause STT: {str(e)}")
+
+@app.get("/api/stt/status")
+async def get_stt_status():
+    return {"is_listening": stt_instance.is_listening}
+
+# ---------------- WebSocket Endpoint ----------------
+@app.websocket("/ws/stt")
+async def stt_websocket(websocket: WebSocket):
+    await websocket.accept()
+    print("Client connected to /ws/stt")
+    try:
+        while True:
+            recognized_text = stt_instance.get_speech_nowait()
+            if recognized_text:
+                await websocket.send_text(recognized_text)
+            await asyncio.sleep(0.05)  # Prevent busy loop
+    except WebSocketDisconnect:
+        print("Client disconnected from /ws/stt")
+    except Exception as e:
+        print(f"WebSocket error: {e}")
+
+# ---------------- GPT Chat Endpoint ----------------
+# Note: The /api/chat endpoint from Code1 has been integrated above.
+# The placeholder from Code2 is replaced by Code1's chat logic.
+
+# ---------------- Startup Event ----------------
+@app.on_event("startup")
+async def startup_event():
+    # Optionally start STT on server startup
+    # stt_instance.start_listening()
+    pass
+
 # Include the router
 app.include_router(router)
 
 if __name__ == '__main__':
-    import uvicorn
     uvicorn.run(app, host='0.0.0.0', port=8000)
