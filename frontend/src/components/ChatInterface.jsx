@@ -1,6 +1,6 @@
 // ChatInterface.jsx
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Settings, Loader2, Mic, MicOff, Volume2, VolumeX } from 'lucide-react';
+import { Send, Settings, Loader2, Mic, MicOff, Volume2, VolumeX, X, Check } from 'lucide-react';
 
 const ChatInterface = () => {
   const [messages, setMessages] = useState([]);
@@ -18,8 +18,18 @@ const ChatInterface = () => {
   // GPT response generation state
   const [isGenerating, setIsGenerating] = useState(false);
 
+  // WebSocket connection status
+  const [wsConnectionStatus, setWsConnectionStatus] = useState('disconnected');
+
+  // Refs for WebSocket and messages
   const messagesEndRef = useRef(null);
   const websocketRef = useRef(null);
+  const messagesRef = useRef(messages);
+
+  // Update messagesRef whenever messages change
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   // ------------------- SCROLL TO BOTTOM WHEN MESSAGES UPDATE -------------------
   useEffect(() => {
@@ -32,8 +42,11 @@ const ChatInterface = () => {
     const ws = new WebSocket('ws://localhost:8000/ws/chat'); // Adjust if using SSL => wss://
     websocketRef.current = ws;
 
+    setWsConnectionStatus('connecting');
+
     ws.onopen = () => {
       console.log('Connected to Unified Chat WebSocket');
+      setWsConnectionStatus('connected');
     };
 
     ws.onmessage = (event) => {
@@ -51,25 +64,24 @@ const ChatInterface = () => {
               timestamp: new Date().toLocaleTimeString(),
             },
           ]);
-        
+
           // 2) Immediately call the "chat" action over WebSocket so GPT responds:
           websocketRef.current.send(
             JSON.stringify({
               action: 'chat',
               messages: [
-                // Use the entire message history plus this new user message
-                ...messages, 
+                ...messagesRef.current,
                 {
                   id: Date.now(),
                   sender: 'user',
                   text: data.stt_text,
                   timestamp: new Date().toLocaleTimeString(),
-                }
+                },
               ],
-            })
+            }),
           );
         }
-        
+
         if (data.content) {
           // Received GPT chat content
           const content = data.content;
@@ -111,10 +123,12 @@ const ChatInterface = () => {
 
     ws.onerror = (error) => {
       console.error('Unified Chat WebSocket error:', error);
+      setWsConnectionStatus('disconnected');
     };
 
     ws.onclose = () => {
       console.log('Unified Chat WebSocket closed');
+      setWsConnectionStatus('disconnected');
     };
 
     // Cleanup on unmount
@@ -196,9 +210,9 @@ const ChatInterface = () => {
 
         // Send chat action over WebSocket
         websocketRef.current.send(
-          JSON.stringify({ action: 'chat', messages: [...messages, newMessage] })
+          JSON.stringify({ action: 'chat', messages: [...messagesRef.current, newMessage] }),
         );
-        console.log('Sent action: chat with messages:', [...messages, newMessage]);
+        console.log('Sent action: chat with messages:', [...messagesRef.current, newMessage]);
       } catch (error) {
         console.error('Error sending message:', error);
       } finally {
@@ -213,6 +227,27 @@ const ChatInterface = () => {
       <div className="bg-white shadow-sm p-4 flex justify-between items-center">
         <h1 className="text-xl font-semibold text-gray-800">STT + TTS Chat</h1>
         <div className="flex items-center gap-4">
+          {/* WebSocket Connection Status */}
+          <div
+            title={wsConnectionStatus}
+            className="flex items-center gap-1"
+          >
+            {wsConnectionStatus === 'connected' ? (
+              <div className="text-green-500">
+                <Check className="w-4 h-4" />
+              </div>
+            ) : wsConnectionStatus === 'disconnected' ? (
+              <div className="text-red-500">
+                <X className="w-4 h-4" />
+              </div>
+            ) : (
+              <div className="text-yellow-500">
+                <Loader2 className="w-4 h-4 animate-spin" />
+              </div>
+            )}
+            <span className="text-sm text-gray-600">{wsConnectionStatus}</span>
+          </div>
+
           {/* TTS Toggle */}
           <button
             onClick={toggleTTS}

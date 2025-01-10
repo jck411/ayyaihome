@@ -34,7 +34,11 @@ import uvicorn
 load_dotenv()
 
 # ========================= CONFIG =========================
+
 CONFIG = {
+    "CHAT_CONFIG": {
+        "SYSTEM_PROMPT": "You are a helpful assistant. Users live in Orlando."
+    },
     # Toggle which chat completion provider you want:
     #   "openai" or "openrouter"
     "API_SETTINGS": {
@@ -53,7 +57,7 @@ CONFIG = {
 
     # Toggle which TTS provider you want: "azure" or "openai"
     "GENERAL_TTS": {
-        "TTS_PROVIDER": "azure",  # Changed to "azure"
+        "TTS_PROVIDER": "openai",  # Changed to "azure"
         "TTS_ENABLED": True  # New configuration option
     },
 
@@ -707,7 +711,7 @@ async def validate_messages_for_ws(messages: List[Dict[str, Any]]) -> List[Dict[
         prepared.append({"role": role, "content": text})
 
     # Insert system prompt at the beginning
-    system_prompt = {"role": "system", "content": "You are a helpful assistant. Users live in Orlando, Fl"}
+    system_prompt = {"role": "system", "content": CONFIG["CHAT_CONFIG"]["SYSTEM_PROMPT"]}
     prepared.insert(0, system_prompt)
     
     return prepared
