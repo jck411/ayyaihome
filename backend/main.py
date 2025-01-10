@@ -1,6 +1,9 @@
+import atexit
 import os
 import json
 import asyncio
+import signal
+import threading
 import openai
 import inspect
 import re
@@ -50,7 +53,7 @@ CONFIG = {
 
     # Toggle which TTS provider you want: "azure" or "openai"
     "GENERAL_TTS": {
-        "TTS_PROVIDER": "openai",
+        "TTS_PROVIDER": "azure",  # Changed to "azure"
         "TTS_ENABLED": True  # New configuration option
     },
 
@@ -129,15 +132,92 @@ elif API_HOST == "openrouter":  # Then check for openrouter
 # ==================== Helper Logging ====================
 def conditional_print(message: str, print_type: str = "default"):
     if print_type == "segment" and CONFIG["LOGGING"]["PRINT_SEGMENTS"]:
-        print(message)
+        print(f"[SEGMENT] {message}")
     elif print_type == "tool_call" and CONFIG["LOGGING"]["PRINT_TOOL_CALLS"]:
-        print(message)
+        print(f"[TOOL CALL] {message}")
     elif print_type == "function_call" and CONFIG["LOGGING"]["PRINT_FUNCTION_CALLS"]:
-        print(message)
+        print(f"[FUNCTION CALL] {message}")
     elif CONFIG["LOGGING"]["PRINT_ENABLED"]:
-        print(message)
+        print(f"[INFO] {message}")
 
 # ==================== Core Classes (STT Classes) ====================
+
+# ---------------- Singleton PyAudio Instance  ----------------
+
+class PyAudioSingleton:
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = pyaudio.PyAudio()
+            print("PyAudio initialized.")
+        return cls._instance
+
+    @classmethod
+    def terminate(cls):
+        if cls._instance is not None:
+            cls._instance.terminate()
+            print("PyAudio terminated.")
+            cls._instance = None
+
+# Initialize the singleton
+pyaudio_instance = PyAudioSingleton()
+
+
+class AudioPlayer:
+    def __init__(self, pyaudio_instance, playback_rate=24000, channels=1, format=pyaudio.paInt16):
+        self.pyaudio = pyaudio_instance
+        self.playback_rate = playback_rate
+        self.channels = channels
+        self.format = format
+        self.stream = None
+        self.lock = threading.Lock()
+        self.is_playing = False
+
+    def start_stream(self):
+        with self.lock:
+            if not self.is_playing:
+                self.stream = self.pyaudio.open(
+                    format=self.format,
+                    channels=self.channels,
+                    rate=self.playback_rate,
+                    output=True,
+                    frames_per_buffer=1024
+                )
+                self.is_playing = True
+                print("Audio stream started.")
+
+    def stop_stream(self):
+        with self.lock:
+            if self.stream and self.is_playing:
+                self.stream.stop_stream()
+                self.stream.close()
+                self.stream = None
+                self.is_playing = False
+                print("Audio stream stopped.")
+
+    def write_audio(self, data: bytes):
+        with self.lock:
+            if self.stream and self.is_playing:
+                self.stream.write(data)
+
+# Initialize a global AudioPlayer instance
+audio_player = AudioPlayer(pyaudio_instance)
+
+# ------------------- Shutdown Handler -------------------
+def shutdown():
+    print("Shutting down server...")
+    audio_player.stop_stream()
+    PyAudioSingleton.terminate()
+    print("Shutdown complete.")
+
+# Register the shutdown function
+atexit.register(shutdown)
+
+# Optionally handle SIGINT and SIGTERM for graceful shutdown
+signal.signal(signal.SIGINT, lambda sig, frame: shutdown())
+signal.signal(signal.SIGTERM, lambda sig, frame: shutdown())
+
 # ---------------- Azure STT Class ----------------
 class ContinuousSpeechRecognizer:
     def __init__(self):
@@ -334,36 +414,30 @@ def get_available_functions():
     }
 
 # ==================== Audio Player & TTS ====================
-def audio_player_sync(audio_queue: asyncio.Queue, playback_rate: int, loop: asyncio.AbstractEventLoop):
+def audio_player_sync(audio_queue: asyncio.Queue, loop: asyncio.AbstractEventLoop):
     """
-    Blocks on an asyncio.Queue in a background thread and plays PCM data via PyAudio.
+    Blocks on an asyncio.Queue in a background thread and plays PCM data via the persistent AudioPlayer.
     """
-    pyaudio_instance = pyaudio.PyAudio()  # Create new instance here
-    stream = None
     try:
-        stream = pyaudio_instance.open(
-            format=pyaudio.paInt16,
-            channels=1,
-            rate=playback_rate,
-            output=True
-        )
+        audio_player.start_stream()
         while True:
             future = asyncio.run_coroutine_threadsafe(audio_queue.get(), loop)
             audio_data = future.result()
             if audio_data is None:
+                print("audio_player_sync received stop signal.")
                 break
             try:
-                stream.write(audio_data)
-            except Exception:
+                audio_player.write_audio(audio_data)
+            except Exception as e:
+                print(f"Audio playback error: {e}")
                 break
+    except Exception as e:
+        print(f"audio_player_sync encountered an error: {e}")
     finally:
-        if stream:
-            stream.stop_stream()
-            stream.close()
-        pyaudio_instance.terminate()  # Clean up the instance
+        audio_player.stop_stream()
 
-async def start_audio_player_async(audio_queue: asyncio.Queue, playback_rate: int, loop: asyncio.AbstractEventLoop):
-    await asyncio.to_thread(audio_player_sync, audio_queue, playback_rate, loop)
+async def start_audio_player_async(audio_queue: asyncio.Queue, loop: asyncio.AbstractEventLoop):
+    await asyncio.to_thread(audio_player_sync, audio_queue, loop)
 
 # --------- Azure TTS --------- #
 class PushAudioOutputStreamCallback(speechsdk.audio.PushAudioOutputStreamCallback):
@@ -409,11 +483,13 @@ async def azure_text_to_speech_processor(phrase_queue: asyncio.Queue, audio_queu
             CONFIG["TTS_MODELS"]["AZURE_TTS"]["AUDIO_FORMAT"]
         )
         speech_config.set_speech_synthesis_output_format(audio_format)
+        conditional_print("Azure TTS configured successfully.", "default")
 
         while True:
             phrase = await phrase_queue.get()
             if phrase is None:
                 await audio_queue.put(None)
+                conditional_print("Azure TTS received stop signal.", "default")
                 return
 
             try:
@@ -424,13 +500,15 @@ async def azure_text_to_speech_processor(phrase_queue: asyncio.Queue, audio_queu
 
                 synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=audio_cfg)
                 result_future = synthesizer.speak_ssml_async(ssml_phrase)
+                conditional_print(f"Azure TTS synthesizing phrase: {phrase}", "default")
                 # Wait for the result in an executor (blocking call)
                 await asyncio.get_event_loop().run_in_executor(None, result_future.get)
+                conditional_print("Azure TTS synthesis completed.", "default")
             except Exception as e:
-                conditional_print(f"Azure TTS error: {e}")
+                conditional_print(f"Azure TTS error: {e}", "default")
                 await audio_queue.put(None)
     except Exception as e:
-        conditional_print(f"Azure TTS config error: {e}")
+        conditional_print(f"Azure TTS config error: {e}", "default")
         await audio_queue.put(None)
 
 # --------- OpenAI TTS --------- #
@@ -452,7 +530,7 @@ async def openai_text_to_speech_processor(
         response_format = CONFIG["TTS_MODELS"]["OPENAI_TTS"]["AUDIO_RESPONSE_FORMAT"]
         chunk_size = CONFIG["TTS_MODELS"]["OPENAI_TTS"]["TTS_CHUNK_SIZE"]
     except KeyError as e:
-        conditional_print(f"Missing OpenAI TTS config: {e}")
+        conditional_print(f"Missing OpenAI TTS config: {e}", "default")
         await audio_queue.put(None)
         return
 
@@ -462,6 +540,7 @@ async def openai_text_to_speech_processor(
             if phrase is None:
                 # Signal end of audio to player
                 await audio_queue.put(None)
+                conditional_print("OpenAI TTS received stop signal.", "default")
                 return
 
             stripped_phrase = phrase.strip()
@@ -482,13 +561,14 @@ async def openai_text_to_speech_processor(
 
                 # Optionally add a small pause between phrases
                 await audio_queue.put(b'\x00' * chunk_size)
+                conditional_print("OpenAI TTS synthesis completed for phrase.", "default")
             except Exception as e:
-                conditional_print(f"OpenAI TTS error: {e}")
+                conditional_print(f"OpenAI TTS error: {e}", "default")
                 # Keep going for the next phrase
                 continue
 
     except Exception as e:
-        conditional_print(f"OpenAI TTS general error: {e}")
+        conditional_print(f"OpenAI TTS general error: {e}", "default")
         await audio_queue.put(None)
 
 # --------- Orchestrator for TTS & Audio playback --------- #
@@ -526,7 +606,8 @@ async def process_streams(phrase_queue: asyncio.Queue, audio_queue: asyncio.Queu
         # Start TTS in the background
         tts_task = asyncio.create_task(tts_processor(phrase_queue, audio_queue))
         # Start the audio player
-        audio_player_task = asyncio.create_task(start_audio_player_async(audio_queue, playback_rate, loop))
+        audio_player_task = asyncio.create_task(start_audio_player_async(audio_queue, loop))
+        conditional_print("Started TTS and audio playback tasks.", "default")
         # Wait for both to complete
         await asyncio.gather(tts_task, audio_player_task)
 
@@ -535,11 +616,10 @@ async def process_streams(phrase_queue: asyncio.Queue, audio_queue: asyncio.Queu
         conditional_print("STT resumed after completing TTS.", "segment")
 
     except Exception as e:
-        conditional_print(f"Error in process_streams: {e}")
+        conditional_print(f"Error in process_streams: {e}", "default")
         # Ensure STT is resumed even if an error occurs
         stt_instance.start_listening()
 
-        
 # ==================== Streaming Chat Logic ====================
 def extract_content_from_openai_chunk(chunk: Any) -> Optional[str]:
     try:
@@ -736,6 +816,21 @@ router = APIRouter()
 @app.options("/api/options")
 async def openai_options():
     return Response(status_code=200)
+
+
+# ------------------- Audio Playback Toggle Endpoint -------------------
+@app.post("/api/toggle-audio")
+async def toggle_audio_playback():
+    try:
+        if audio_player.is_playing:
+            audio_player.stop_stream()
+            return {"audio_playing": False}
+        else:
+            audio_player.start_stream()
+            return {"audio_playing": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to toggle audio playback: {str(e)}")
+
 
 # ------------------- TTS Toggle Endpoint -------------------
 @app.post("/api/toggle-tts")
