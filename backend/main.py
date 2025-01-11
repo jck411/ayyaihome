@@ -7,8 +7,8 @@ import threading
 import openai
 import inspect
 import re
-import requests  
-from datetime import datetime, timedelta, timezone
+import requests
+from datetime import datetime
 from timezonefinder import TimezoneFinder
 import pytz
 from typing import Any, AsyncIterator, Callable, Dict, List, Optional, Sequence, Tuple, Union
@@ -23,24 +23,12 @@ import azure.cognitiveservices.speech as speechsdk
 from queue import Queue
 import uvicorn
 
-# =====================================================================================
-# Load .env for your API keys:
-#   - OPENAI_API_KEY=<your openai key>
-#   - OPENROUTER_API_KEY=<your openrouter key>
-# Also set Azure Speech key/region if you use Azure TTS:
-#   - AZURE_SPEECH_KEY=<azure speech key>
-#   - AZURE_SPEECH_REGION=<azure speech region>
-# =====================================================================================
 load_dotenv()
-
-# ========================= CONFIG =========================
 
 CONFIG = {
     "CHAT_CONFIG": {
         "SYSTEM_PROMPT": "You are a helpful assistant. Users live in Orlando."
     },
-    # Toggle which chat completion provider you want:
-    #   "openai" or "openrouter"
     "API_SETTINGS": {
         "API_HOST": "openai"
     },
@@ -54,13 +42,10 @@ CONFIG = {
             "MODEL": "meta-llama/llama-3.1-70b-instruct"
         },
     },
-
-    # Toggle which TTS provider you want: "azure" or "openai"
     "GENERAL_TTS": {
-        "TTS_PROVIDER": "openai",  # Changed to "azure"
-        "TTS_ENABLED": True  # New configuration option
+        "TTS_PROVIDER": "openai",
+        "TTS_ENABLED": True
     },
-
     "PROCESSING_PIPELINE": {
         "USE_SEGMENTATION": True,
         "DELIMITERS": ["\n", ". ", "? ", "! ", "* "],
@@ -84,7 +69,6 @@ CONFIG = {
         "AZURE_TTS": {
             "TTS_SPEED": "0%",
             "TTS_VOICE": "en-US-KaiNeural",
-            "SPEECH_SYNTHESIS_RATE": "0%",
             "AUDIO_FORMAT": "Raw24Khz16BitMonoPcm",
             "AUDIO_FORMAT_RATES": {
                 "Raw8Khz16BitMonoPcm": 8000,
@@ -116,24 +100,21 @@ CONFIG = {
     }
 }
 
-# ========================= SELECT CHAT PROVIDER =========================
 API_HOST = CONFIG["API_SETTINGS"]["API_HOST"].lower()
 
-if API_HOST == "openai":  # Check for openai first
+if API_HOST == "openai":
     client = openai.AsyncOpenAI(
         api_key=os.getenv("OPENAI_API_KEY"),
         base_url=CONFIG["API_SERVICES"]["openai"]["BASE_URL"]
     )
     DEPLOYMENT_NAME = CONFIG["API_SERVICES"]["openai"]["MODEL"]
-
-elif API_HOST == "openrouter":  # Then check for openrouter
+elif API_HOST == "openrouter":
     client = openai.AsyncOpenAI(
         api_key=os.getenv("OPENROUTER_API_KEY"),
         base_url=CONFIG["API_SERVICES"]["openrouter"]["BASE_URL"]
     )
     DEPLOYMENT_NAME = CONFIG["API_SERVICES"]["openrouter"]["MODEL"]
 
-# ==================== Helper Logging ====================
 def conditional_print(message: str, print_type: str = "default"):
     if print_type == "segment" and CONFIG["LOGGING"]["PRINT_SEGMENTS"]:
         print(f"[SEGMENT] {message}")
@@ -143,10 +124,6 @@ def conditional_print(message: str, print_type: str = "default"):
         print(f"[FUNCTION CALL] {message}")
     elif CONFIG["LOGGING"]["PRINT_ENABLED"]:
         print(f"[INFO] {message}")
-
-# ==================== Core Classes (STT Classes) ====================
-
-# ---------------- Singleton PyAudio Instance  ----------------
 
 class PyAudioSingleton:
     _instance = None
@@ -164,9 +141,7 @@ class PyAudioSingleton:
             print("PyAudio terminated.")
             cls._instance = None
 
-# Initialize the singleton
 pyaudio_instance = PyAudioSingleton()
-
 
 class AudioPlayer:
     def __init__(self, pyaudio_instance, playback_rate=24000, channels=1, format=pyaudio.paInt16):
@@ -181,6 +156,7 @@ class AudioPlayer:
     def start_stream(self):
         with self.lock:
             if not self.is_playing:
+                # use frames_per_buffer to 2048 for smoother playback
                 self.stream = self.pyaudio.open(
                     format=self.format,
                     channels=self.channels,
@@ -205,31 +181,23 @@ class AudioPlayer:
             if self.stream and self.is_playing:
                 self.stream.write(data)
 
-# Initialize a global AudioPlayer instance
 audio_player = AudioPlayer(pyaudio_instance)
 
-# ------------------- Shutdown Handler -------------------
 def shutdown():
     print("Shutting down server...")
     audio_player.stop_stream()
     PyAudioSingleton.terminate()
     stt_instance.pause_listening()
-    
-    # Free the port
     try:
         os.system('fuser -k 8000/tcp')
     except:
         pass
     print("Shutdown complete.")
 
-# Register the shutdown function
 atexit.register(shutdown)
-
-# Optionally handle SIGINT and SIGTERM for graceful shutdown
 signal.signal(signal.SIGINT, lambda sig, frame: shutdown())
 signal.signal(signal.SIGTERM, lambda sig, frame: shutdown())
 
-# ---------------- Azure STT Class ----------------
 class ContinuousSpeechRecognizer:
     def __init__(self):
         self.speech_key = os.getenv('AZURE_SPEECH_KEY')
@@ -241,19 +209,16 @@ class ContinuousSpeechRecognizer:
     def setup_recognizer(self):
         if not self.speech_key or not self.speech_region:
             raise ValueError("Azure Speech Key or Region is not set.")
-
         speech_config = speechsdk.SpeechConfig(
             subscription=self.speech_key,
             region=self.speech_region
         )
-        speech_config.speech_recognition_language = "en-US"  # Default language
-
+        speech_config.speech_recognition_language = "en-US"
         audio_config = speechsdk.audio.AudioConfig(use_default_microphone=True)
         self.speech_recognizer = speechsdk.SpeechRecognizer(
             speech_config=speech_config,
             audio_config=audio_config
         )
-
         self.speech_recognizer.recognized.connect(self.handle_final_result)
 
     def handle_final_result(self, evt):
@@ -278,10 +243,8 @@ class ContinuousSpeechRecognizer:
         except:
             return None
 
-# Single global instance
 stt_instance = ContinuousSpeechRecognizer()
 
-# ==================== Tools & Function Calls ====================
 def check_args(function: Callable, args: dict) -> bool:
     sig = inspect.signature(function)
     params = sig.parameters
@@ -304,51 +267,24 @@ def get_function_and_args(tool_call: dict, available_functions: dict) -> Tuple[C
     return function_to_call, function_args
 
 def fetch_weather(lat=28.5383, lon=-81.3792, exclude="minutely", units="metric", lang="en"):
-    """
-    Fetch weather data from OpenWeatherMap API.
-    By default, excludes minute-by-minute data and uses Orlando, FL as the location.
-
-    Parameters:
-    - lat (float, optional): Latitude of the location. Defaults to Orlando, FL (28.5383).
-    - lon (float, optional): Longitude of the location. Defaults to Orlando, FL (-81.3792).
-    - exclude (str, optional): Data to exclude (e.g., 'minutely,hourly'). Defaults to "minutely".
-    - units (str, optional): Units of measurement. Defaults to "metric".
-    - lang (str, optional): Language of the response. Defaults to "en".
-
-    Returns:
-    - dict: Weather data in JSON format.
-    """
     load_dotenv()
     api_key = os.getenv('OPENWEATHER_API_KEY')
     if not api_key:
         raise ValueError("API key not found. Please set OPENWEATHER_API_KEY in your .env file.")
-    
     url = f"https://api.openweathermap.org/data/3.0/onecall?lat={lat}&lon={lon}&appid={api_key}&units={units}&lang={lang}"
     if exclude:
         url += f"&exclude={exclude}"
-    
     response = requests.get(url)
     response.raise_for_status()
     return response.json()
 
 def get_time(lat=28.5383, lon=-81.3792):
-    """
-    Fetch the current time based on the location's latitude and longitude.
-
-    Parameters:
-    - lat (float, optional): Latitude of the location. Defaults to Orlando, FL (28.5383).
-    - lon (float, optional): Longitude of the location. Defaults to Orlando, FL (-81.3792).
-
-    Returns:
-    - str: Current time in HH:MM:SS format.
-    """
     tf = TimezoneFinder()
-    tz_name = tf.timezone_at(lat=lat, lng=lon)  # Find the time zone
+    tz_name = tf.timezone_at(lat=lat, lng=lon)
     if not tz_name:
         raise ValueError("Time zone could not be determined for the given coordinates.")
-    
     local_tz = pytz.timezone(tz_name)
-    local_time = datetime.now(local_tz)  # Convert to local time
+    local_time = datetime.now(local_tz)
     return local_time.strftime("%H:%M:%S")
 
 def get_tools():
@@ -357,37 +293,17 @@ def get_tools():
             "type": "function",
             "function": {
                 "name": "fetch_weather",
-                "description": "Fetch current weather and forecast data from OpenWeatherMap API. Returns in Celcius but report Farenheit or Celcius based on country and give a concise summary unless asked for detail",
+                "description": "Fetch current weather...",
                 "strict": True,
                 "parameters": {
                     "type": "object",
                     "required": ["lat", "lon", "exclude", "units", "lang"],
                     "properties": {
-                        "lat": {
-                            "type": "number",
-                            "description": "Latitude of the location. Defaults to Orlando, FL (28.5383).",
-                            "nullable": True
-                        },
-                        "lon": {
-                            "type": "number",
-                            "description": "Longitude of the location. Defaults to Orlando, FL (-81.3792).",
-                            "nullable": True
-                        },
-                        "exclude": {
-                            "type": "string",
-                            "description": "Data to exclude (e.g., 'minutely,hourly'). Defaults to 'minutely'.",
-                            "nullable": True
-                        },
-                        "units": {
-                            "type": "string",
-                            "description": "Units of measurement ('standard', 'metric', 'imperial'). based on country.",
-                            "nullable": True
-                        },
-                        "lang": {
-                            "type": "string",
-                            "description": "Language of the response. Defaults to 'en'.",
-                            "nullable": True
-                        }
+                        "lat": {"type": "number","nullable": True},
+                        "lon": {"type": "number","nullable": True},
+                        "exclude": {"type": "string","nullable": True},
+                        "units": {"type": "string","nullable": True},
+                        "lang": {"type": "string","nullable": True}
                     },
                     "additionalProperties": False
                 }
@@ -397,20 +313,14 @@ def get_tools():
             "type": "function",
             "function": {
                 "name": "get_time",
-                "description": "Fetch the current time based on the location's latitude and longitude. Report to nearest minute unless asked for seconds.",
+                "description": "Fetch the current time...",
                 "strict": True,
                 "parameters": {
                     "type": "object",
                     "required": ["lat", "lon"],
                     "properties": {
-                        "lat": {
-                            "type": "number",
-                            "description": "Latitude of the location. Defaults to Orlando, FL (28.5383)."
-                        },
-                        "lon": {
-                            "type": "number",
-                            "description": "Longitude of the location. Defaults to Orlando, FL (-81.3792)."
-                        }
+                        "lat": {"type": "number"},
+                        "lon": {"type": "number"}
                     },
                     "additionalProperties": False
                 }
@@ -419,16 +329,12 @@ def get_tools():
     ]
 
 def get_available_functions():
-    return { 
+    return {
         "fetch_weather": fetch_weather,
         "get_time": get_time
     }
 
-# ==================== Audio Player & TTS ====================
 def audio_player_sync(audio_queue: asyncio.Queue, loop: asyncio.AbstractEventLoop):
-    """
-    Blocks on an asyncio.Queue in a background thread and plays PCM data via the persistent AudioPlayer.
-    """
     try:
         audio_player.start_stream()
         while True:
@@ -450,7 +356,6 @@ def audio_player_sync(audio_queue: asyncio.Queue, loop: asyncio.AbstractEventLoo
 async def start_audio_player_async(audio_queue: asyncio.Queue, loop: asyncio.AbstractEventLoop):
     await asyncio.to_thread(audio_player_sync, audio_queue, loop)
 
-# --------- Azure TTS --------- #
 class PushAudioOutputStreamCallback(speechsdk.audio.PushAudioOutputStreamCallback):
     def __init__(self, audio_queue: asyncio.Queue):
         super().__init__()
@@ -458,50 +363,81 @@ class PushAudioOutputStreamCallback(speechsdk.audio.PushAudioOutputStreamCallbac
         self.loop = asyncio.get_event_loop()
 
     def write(self, data: memoryview) -> int:
-        # This gets called by Azure, so we pass the bytes to the asyncio queue
         self.loop.call_soon_threadsafe(self.audio_queue.put_nowait, data.tobytes())
         return len(data)
 
     def close(self):
-        # Once Azure is done, we push None to signal done
         self.loop.call_soon_threadsafe(self.audio_queue.put_nowait, None)
 
 def create_ssml(phrase: str, voice: str, prosody: dict) -> str:
     return f"""
 <speak version='1.0' xml:lang='en-US'>
     <voice name='{voice}'>
-        <prosody rate='{prosody["rate"]}' pitch='{prosody["pitch"]}' volume='{prosody["volume"]}'>
+        <prosody rate='{prosody.get("rate","1.0")}' pitch='{prosody.get("pitch","0%")}' volume='{prosody.get("volume","default")}'>
             {phrase}
         </prosody>
     </voice>
 </speak>
 """
 
-async def azure_text_to_speech_processor(phrase_queue: asyncio.Queue, audio_queue: asyncio.Queue):
-    """
-    Continuously read text from phrase_queue, convert to speech with Azure TTS,
-    and push PCM data into audio_queue for playback.
-    """
-    try:
-        speech_config = speechsdk.SpeechConfig(
-            subscription=os.getenv("AZURE_SPEECH_KEY"),
-            region=os.getenv("AZURE_SPEECH_REGION")
-        )
+# A single global STOP_FLAG
+STOP_FLAG = False
+
+# Pre-initialize Azure TTS config and synthesizer for re-use
+# (We only re-create the push stream callback per phrase)
+AZURE_SPEECH_CONFIG = None
+AZURE_TTS_READY = False
+try:
+    # Only do this once (if your environment variables are present)
+    azure_key = os.getenv("AZURE_SPEECH_KEY")
+    azure_region = os.getenv("AZURE_SPEECH_REGION")
+    if azure_key and azure_region:
+        AZURE_SPEECH_CONFIG = speechsdk.SpeechConfig(subscription=azure_key, region=azure_region)
+        # Configure once
         prosody = CONFIG["TTS_MODELS"]["AZURE_TTS"]["PROSODY"]
         voice = CONFIG["TTS_MODELS"]["AZURE_TTS"]["TTS_VOICE"]
         audio_format = getattr(
             speechsdk.SpeechSynthesisOutputFormat, 
             CONFIG["TTS_MODELS"]["AZURE_TTS"]["AUDIO_FORMAT"]
         )
-        speech_config.set_speech_synthesis_output_format(audio_format)
-        conditional_print("Azure TTS configured successfully.", "default")
+        AZURE_SPEECH_CONFIG.set_speech_synthesis_output_format(audio_format)
+        AZURE_TTS_READY = True
+except Exception as e:
+    conditional_print(f"Azure TTS config initialization error: {e}", "default")
 
+
+async def azure_text_to_speech_processor(phrase_queue: asyncio.Queue, audio_queue: asyncio.Queue):
+    if not AZURE_SPEECH_CONFIG or not AZURE_TTS_READY:
+        conditional_print("Azure TTS is not configured properly; skipping TTS process.", "default")
+        # Send None to end the audio stream if TTS not available
         while True:
             phrase = await phrase_queue.get()
             if phrase is None:
+                break
+        await audio_queue.put(None)
+        return
+
+    # Pull settings once
+    prosody = CONFIG["TTS_MODELS"]["AZURE_TTS"]["PROSODY"]
+    voice = CONFIG["TTS_MODELS"]["AZURE_TTS"]["TTS_VOICE"]
+
+    try:
+        while True:
+            # Check stop flag
+            if STOP_FLAG:
+                conditional_print("TTS sees STOP_FLAG True, exiting Azure TTS loop.", "default")
+                break
+
+            phrase = await phrase_queue.get()
+            if phrase is None:
                 await audio_queue.put(None)
-                conditional_print("Azure TTS received stop signal.", "default")
+                conditional_print("Azure TTS received stop signal (phrase=None).", "default")
                 return
+
+            # Also check STOP_FLAG after reading
+            if STOP_FLAG:
+                conditional_print("TTS sees STOP_FLAG True, exiting Azure TTS loop.", "default")
+                break
 
             try:
                 ssml_phrase = create_ssml(phrase, voice, prosody)
@@ -509,31 +445,36 @@ async def azure_text_to_speech_processor(phrase_queue: asyncio.Queue, audio_queu
                 push_stream = speechsdk.audio.PushAudioOutputStream(push_stream_callback)
                 audio_cfg = speechsdk.audio.AudioOutputConfig(stream=push_stream)
 
-                synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=audio_cfg)
+                # Re-use the global AZURE_SPEECH_CONFIG, but create a new synthesizer each phrase
+                synthesizer = speechsdk.SpeechSynthesizer(
+                    speech_config=AZURE_SPEECH_CONFIG,
+                    audio_config=audio_cfg
+                )
+
                 result_future = synthesizer.speak_ssml_async(ssml_phrase)
                 conditional_print(f"Azure TTS synthesizing phrase: {phrase}", "default")
-                # Wait for the result in an executor (blocking call)
                 await asyncio.get_event_loop().run_in_executor(None, result_future.get)
                 conditional_print("Azure TTS synthesis completed.", "default")
+
             except Exception as e:
                 conditional_print(f"Azure TTS error: {e}", "default")
                 await audio_queue.put(None)
-    except Exception as e:
-        conditional_print(f"Azure TTS config error: {e}", "default")
-        await audio_queue.put(None)
 
-# --------- OpenAI TTS --------- #
+    except Exception as e:
+        conditional_print(f"Azure TTS processor error: {e}", "default")
+        await audio_queue.put(None)
+    finally:
+        # Send final None to let player exit
+        await audio_queue.put(None)
+        conditional_print("Azure TTS loop done.", "default")
+
+
 async def openai_text_to_speech_processor(
     phrase_queue: asyncio.Queue,
     audio_queue: asyncio.Queue,
     openai_client: Optional[openai.AsyncOpenAI] = None
 ):
-    """
-    Reads phrases from phrase_queue, calls OpenAI TTS streaming,
-    and pushes audio chunks to audio_queue.
-    """
     openai_client = openai_client or openai.AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
     try:
         model = CONFIG["TTS_MODELS"]["OPENAI_TTS"]["TTS_MODEL"]
         voice = CONFIG["TTS_MODELS"]["OPENAI_TTS"]["TTS_VOICE"]
@@ -547,19 +488,24 @@ async def openai_text_to_speech_processor(
 
     try:
         while True:
+            if STOP_FLAG:  # check the stop flag
+                conditional_print("TTS sees STOP_FLAG True, exiting OpenAI TTS loop.", "default")
+                break
+
             phrase = await phrase_queue.get()
             if phrase is None:
-                # Signal end of audio to player
                 await audio_queue.put(None)
-                conditional_print("OpenAI TTS received stop signal.", "default")
+                conditional_print("OpenAI TTS received stop signal (phrase=None).", "default")
                 return
+
+            if STOP_FLAG:
+                break
 
             stripped_phrase = phrase.strip()
             if not stripped_phrase:
                 continue
 
             try:
-                # Create streaming request to OpenAI TTS endpoint
                 async with openai_client.audio.speech.with_streaming_response.create(
                     model=model,
                     voice=voice,
@@ -568,29 +514,26 @@ async def openai_text_to_speech_processor(
                     response_format=response_format
                 ) as response:
                     async for audio_chunk in response.iter_bytes(chunk_size):
+                        if STOP_FLAG:
+                            conditional_print("STOP_FLAG True in TTS streaming chunk loop. Breaking.", "default")
+                            break
                         await audio_queue.put(audio_chunk)
 
-                # Optionally add a small pause between phrases
-                await audio_queue.put(b'\x00' * chunk_size)
+                # Removed the artificial padding b'\x00' * chunk_size to avoid stutters
                 conditional_print("OpenAI TTS synthesis completed for phrase.", "default")
+
             except Exception as e:
                 conditional_print(f"OpenAI TTS error: {e}", "default")
-                # Keep going for the next phrase
                 continue
 
-    except Exception as e:
-        conditional_print(f"OpenAI TTS general error: {e}", "default")
+    finally:
         await audio_queue.put(None)
+        conditional_print("OpenAI TTS loop done.", "default")
 
-# --------- Orchestrator for TTS & Audio playback --------- #
+
 async def process_streams(phrase_queue: asyncio.Queue, audio_queue: asyncio.Queue):
-    """
-    Chooses which TTS to run (Azure or OpenAI) and then starts
-    the audio player to consume from audio_queue.
-    """
-    # Check if TTS is enabled
     if not CONFIG["GENERAL_TTS"]["TTS_ENABLED"]:
-        # If TTS is disabled, just consume the phrases without processing
+        # Drain phrase_queue and ignore if TTS is disabled
         while True:
             phrase = await phrase_queue.get()
             if phrase is None:
@@ -601,37 +544,28 @@ async def process_streams(phrase_queue: asyncio.Queue, audio_queue: asyncio.Queu
         provider = CONFIG["GENERAL_TTS"]["TTS_PROVIDER"].lower()
         if provider == "azure":
             tts_processor = azure_text_to_speech_processor
-            playback_rate = CONFIG["TTS_MODELS"]["AZURE_TTS"]["PLAYBACK_RATE"]
         elif provider == "openai":
             tts_processor = openai_text_to_speech_processor
-            playback_rate = CONFIG["TTS_MODELS"]["OPENAI_TTS"]["PLAYBACK_RATE"]
         else:
             raise ValueError(f"Unsupported TTS provider: {provider}")
 
         loop = asyncio.get_running_loop()
-
-        # **Pause STT before starting TTS**
         stt_instance.pause_listening()
         conditional_print("STT paused before starting TTS.", "segment")
 
-        # Start TTS in the background
         tts_task = asyncio.create_task(tts_processor(phrase_queue, audio_queue))
-        # Start the audio player
         audio_player_task = asyncio.create_task(start_audio_player_async(audio_queue, loop))
         conditional_print("Started TTS and audio playback tasks.", "default")
-        # Wait for both to complete
-        await asyncio.gather(tts_task, audio_player_task)
 
-        # **Resume STT after TTS is done**
-        stt_instance.start_listening()
-        conditional_print("STT resumed after completing TTS.", "segment")
+        await asyncio.gather(tts_task, audio_player_task)
 
     except Exception as e:
         conditional_print(f"Error in process_streams: {e}", "default")
-        # Ensure STT is resumed even if an error occurs
+    finally:
+        # After TTS is done or aborted, resume STT
         stt_instance.start_listening()
+        conditional_print("STT resumed after TTS was canceled or completed.", "segment")
 
-# ==================== Streaming Chat Logic ====================
 def extract_content_from_openai_chunk(chunk: Any) -> Optional[str]:
     try:
         return chunk.choices[0].delta.content
@@ -658,6 +592,10 @@ async def process_chunks(
     segmentation_active = use_segmentation
 
     while True:
+        if STOP_FLAG:
+            conditional_print("STOP_FLAG True in process_chunks, breaking out immediately.", "default")
+            break
+
         chunk = await chunk_queue.get()
         if chunk is None:
             if working_string.strip():
@@ -688,11 +626,6 @@ async def process_chunks(
                         break
 
 async def validate_messages_for_ws(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """
-    Validates and prepares messages for OpenAI completion.
-    This function replicates the logic from `validate_and_prepare_for_openai_completion`
-    but accepts messages directly instead of a Request object.
-    """
     if not isinstance(messages, list):
         raise HTTPException(status_code=400, detail="'messages' must be a list.")
 
@@ -713,20 +646,16 @@ async def validate_messages_for_ws(messages: List[Dict[str, Any]]) -> List[Dict[
         elif sender.lower() == 'assistant':
             role = 'assistant'
         else:
-            raise HTTPException(status_code=400, detail=f"Invalid sender at index {idx}. Must be 'user' or 'assistant'.")
+            raise HTTPException(status_code=400, detail=f"Invalid sender at index {idx}.")
 
         prepared.append({"role": role, "content": text})
 
-    # Insert system prompt at the beginning
     system_prompt = {"role": "system", "content": CONFIG["CHAT_CONFIG"]["SYSTEM_PROMPT"]}
     prepared.insert(0, system_prompt)
     
     return prepared
 
-async def stream_openai_completion(
-    messages: Sequence[Dict[str, Union[str, Any]]],
-    phrase_queue: asyncio.Queue
-) -> AsyncIterator[str]:
+async def stream_openai_completion(messages: Sequence[Dict[str, Any]], phrase_queue: asyncio.Queue) -> AsyncIterator[str]:
     delimiter_pattern = compile_delimiter_pattern(CONFIG["PROCESSING_PIPELINE"]["DELIMITERS"])
     use_segmentation = CONFIG["PROCESSING_PIPELINE"]["USE_SEGMENTATION"]
     character_max = CONFIG["PROCESSING_PIPELINE"]["CHARACTER_MAXIMUM"]
@@ -749,6 +678,10 @@ async def stream_openai_completion(
 
         tool_calls = []
         async for chunk in response:
+            if STOP_FLAG:
+                conditional_print("STOP_FLAG True in stream_openai_completion, breaking from chunk loop.", "default")
+                break
+
             delta = chunk.choices[0].delta if (chunk.choices and chunk.choices[0].delta) else None
             if delta and delta.content:
                 yield delta.content
@@ -766,8 +699,8 @@ async def stream_openai_completion(
                     if tc_chunk.function.arguments:
                         tc["function"]["arguments"] += tc_chunk.function.arguments
 
-        # Handle tool calls if present
-        if tool_calls:
+        # If STOP_FLAG triggered, we break out, skipping the rest
+        if not STOP_FLAG and tool_calls:
             conditional_print("[Tool Calls Detected]:", "tool_call")
             for tc in tool_calls:
                 conditional_print(json.dumps(tc, indent=2), "tool_call")
@@ -792,19 +725,23 @@ async def stream_openai_completion(
                 except ValueError as e:
                     messages.append({"role": "assistant", "content": f"[Error]: {str(e)}"})
 
-            # Follow-up after processing tool calls
-            follow_up = await client.chat.completions.create(
-                model=DEPLOYMENT_NAME,
-                messages=messages,
-                stream=True,
-                temperature=0.7,
-                top_p=1.0,
-            )
-            async for fu_chunk in follow_up:
-                content = extract_content_from_openai_chunk(fu_chunk)
-                if content:
-                    yield content
-                await chunk_queue.put(fu_chunk)
+            # Follow-up after tools if we didn't stop
+            if not STOP_FLAG:
+                follow_up = await client.chat.completions.create(
+                    model=DEPLOYMENT_NAME,
+                    messages=messages,
+                    stream=True,
+                    temperature=0.7,
+                    top_p=1.0,
+                )
+                async for fu_chunk in follow_up:
+                    if STOP_FLAG:
+                        conditional_print("STOP_FLAG True in follow_up loop, breaking out.", "default")
+                        break
+                    content = extract_content_from_openai_chunk(fu_chunk)
+                    if content:
+                        yield content
+                    await chunk_queue.put(fu_chunk)
 
         await chunk_queue.put(None)
         await chunk_processor_task
@@ -813,11 +750,11 @@ async def stream_openai_completion(
         await chunk_queue.put(None)
         raise HTTPException(status_code=500, detail=f"OpenAI API error: {e}")
 
-# ==================== Frontend Endpoints ====================
+# ==================== FastAPI App ====================
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "*"],  # Merged CORS origins
+    allow_origins=["http://localhost:3000", "*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -828,8 +765,6 @@ router = APIRouter()
 async def openai_options():
     return Response(status_code=200)
 
-
-# ------------------- Audio Playback Toggle Endpoint -------------------
 @app.post("/api/toggle-audio")
 async def toggle_audio_playback():
     try:
@@ -842,8 +777,6 @@ async def toggle_audio_playback():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to toggle audio playback: {str(e)}")
 
-
-# ------------------- TTS Toggle Endpoint -------------------
 @app.post("/api/toggle-tts")
 async def toggle_tts():
     try:
@@ -853,12 +786,18 @@ async def toggle_tts():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to toggle TTS: {str(e)}")
 
-# ---------------- Unified WebSocket Endpoint ----------------
+@app.post("/api/stop")
+async def stop_generation():
+    global STOP_FLAG
+    STOP_FLAG = True
+    audio_player.stop_stream()
+    stt_instance.pause_listening()
+    return {"message": "Stop flag set. Ongoing chat/tts loops should exit."}
+
 async def stream_stt_to_client(websocket: WebSocket):
     while True:
         recognized_text = stt_instance.get_speech_nowait()
         if recognized_text:
-            # Send recognized STT text to client
             await websocket.send_json({"stt_text": recognized_text})
         await asyncio.sleep(0.05)
 
@@ -867,12 +806,10 @@ async def unified_chat_websocket(websocket: WebSocket):
     await websocket.accept()
     print("Client connected to /ws/chat")
 
-    # Start a background task that streams recognized STT text
     stt_task = asyncio.create_task(stream_stt_to_client(websocket))
 
     try:
         while True:
-            # The client sends data as JSON (e.g., chat messages or STT commands)
             data = await websocket.receive_json()
             action = data.get("action")
 
@@ -885,57 +822,48 @@ async def unified_chat_websocket(websocket: WebSocket):
                 await websocket.send_json({"is_listening": False})
 
             elif action == "chat":
-                # Client is requesting a GPT completion
-                messages = data.get("messages", [])
+                global STOP_FLAG
+                STOP_FLAG = False
 
-                # Validate & prepare the messages using the new function
+                messages = data.get("messages", [])
                 validated = await validate_messages_for_ws(messages)
 
-                # Create queues for the chunk-processing + TTS
                 phrase_queue = asyncio.Queue()
                 audio_queue = asyncio.Queue()
 
-                # **Pause STT before processing chat and starting TTS**
                 stt_instance.pause_listening()
                 await websocket.send_json({"stt_paused": True})
                 conditional_print("STT paused before processing chat.", "segment")
 
-                # Launch TTS and audio processing
                 process_streams_task = asyncio.create_task(process_streams(phrase_queue, audio_queue))
 
-                # Stream the OpenAI completion and send chunks back to client
                 try:
                     async for content in stream_openai_completion(validated, phrase_queue):
-                        # Each piece of content is sent over the same WebSocket
+                        if STOP_FLAG:
+                            conditional_print("STOP_FLAG True in /ws/chat loop, stopping sending content.", "default")
+                            break
                         await websocket.send_json({"content": content})
                 finally:
-                    # Signal TTS to stop
                     await phrase_queue.put(None)
                     await process_streams_task
 
-                    # **Resume STT after chat and TTS processing is complete**
                     stt_instance.start_listening()
                     await websocket.send_json({"stt_resumed": True})
                     conditional_print("STT resumed after processing chat.", "segment")
 
     except WebSocketDisconnect:
         print("Client disconnected from /ws/chat")
-    except Exception as e:
-        print(f"WebSocket error in unified_chat_websocket: {e}")
     finally:
-        # Ensure we stop STT and cancel the background task
         stt_task.cancel()
         stt_instance.pause_listening()
         await websocket.close()
 
-# ==================== Include Routers ====================
 app.include_router(router)
 
-# ==================== Main Execution ====================
 if __name__ == '__main__':
     uvicorn.run(
-        "main:app",  # Replace with your script name if different
+        "main:app",
         host="0.0.0.0",
         port=8000,
-        reload=True  # Always enable auto-reload during development
+        reload=True
     )

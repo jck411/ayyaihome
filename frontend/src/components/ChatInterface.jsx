@@ -1,12 +1,10 @@
-// ChatInterface.jsx
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Settings, Loader2, Mic, MicOff, Volume2, VolumeX, X, Check } from 'lucide-react';
-
-const RECONNECT_INTERVAL = 3000; // 3 seconds, adjust as needed
+import { Send, Settings, Loader2, Mic, MicOff, Volume2, VolumeX, X, Check, Square } from 'lucide-react';
 
 const ChatInterface = () => {
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
+  const [isStoppingGeneration, setIsStoppingGeneration] = useState(false);
 
   // TTS (backend) toggle
   const [ttsEnabled, setTtsEnabled] = useState(true);
@@ -21,7 +19,6 @@ const ChatInterface = () => {
   const [isGenerating, setIsGenerating] = useState(false);
 
   // WebSocket connection status
-  // Possible values: 'connecting', 'connected', 'disconnected'
   const [wsConnectionStatus, setWsConnectionStatus] = useState('disconnected');
 
   // Refs for WebSocket and messages
@@ -39,13 +36,12 @@ const ChatInterface = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  /**
-   * Connect or reconnect the WebSocket.
-   */
-  const connectWebSocket = () => {
-    setWsConnectionStatus('connecting');
+  // WebSocket setup
+  useEffect(() => {
     const ws = new WebSocket('ws://localhost:8000/ws/chat');
     websocketRef.current = ws;
+
+    setWsConnectionStatus('connecting');
 
     ws.onopen = () => {
       console.log('Connected to Unified Chat WebSocket');
@@ -57,7 +53,6 @@ const ChatInterface = () => {
         const data = JSON.parse(event.data);
 
         if (data.stt_text) {
-          // 1) Insert recognized text into the messages list:
           setMessages((prev) => [
             ...prev,
             {
@@ -68,7 +63,7 @@ const ChatInterface = () => {
             },
           ]);
 
-          // 2) Immediately call the "chat" action over WebSocket so GPT responds:
+          setIsGenerating(true);
           websocketRef.current.send(
             JSON.stringify({
               action: 'chat',
@@ -86,11 +81,14 @@ const ChatInterface = () => {
         }
 
         if (data.content) {
-          // Received GPT chat content
           const content = data.content;
           console.log(`Received GPT content: ${content}`);
+          
+          if (data.done === true) {
+            setIsGenerating(false);
+          }
+          
           setMessages((prev) => {
-            // Find the last assistant message
             const lastIndex = prev.length - 1;
             if (prev[lastIndex] && prev[lastIndex].sender === 'assistant') {
               const updatedMessage = {
@@ -99,7 +97,6 @@ const ChatInterface = () => {
               };
               return [...prev.slice(0, lastIndex), updatedMessage];
             } else {
-              // If no assistant message exists, create one
               return [
                 ...prev,
                 {
@@ -114,7 +111,6 @@ const ChatInterface = () => {
         }
 
         if (data.is_listening !== undefined) {
-          // Received STT status update
           setIsSttOn(data.is_listening);
           console.log(`STT is now ${data.is_listening ? 'ON' : 'OFF'}`);
         }
@@ -125,37 +121,39 @@ const ChatInterface = () => {
 
     ws.onerror = (error) => {
       console.error('Unified Chat WebSocket error:', error);
-      // You can decide whether to close the connection on error, 
-      // or leave it open for the onclose to handle reconnection
-      ws.close();
+      setWsConnectionStatus('disconnected');
     };
 
     ws.onclose = () => {
       console.log('Unified Chat WebSocket closed');
       setWsConnectionStatus('disconnected');
-      // Attempt to reconnect after a delay
-      setTimeout(() => {
-        console.log('Attempting to reconnect...');
-        connectWebSocket();
-      }, RECONNECT_INTERVAL);
     };
-  };
 
-  // Create the WebSocket connection when the component mounts
-  useEffect(() => {
-    connectWebSocket();
-
-    // Cleanup on unmount
     return () => {
-      // If you want to stop reconnection attempts on unmount, close here
-      if (websocketRef.current) {
-        websocketRef.current.close();
-      }
+      ws.close();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ------------------- HANDLE TTS TOGGLE -------------------
+  const handleStop = async () => {
+    setIsStoppingGeneration(true);
+    try {
+      const response = await fetch('http://localhost:8000/api/stop', {
+        method: 'POST',
+      });
+
+      if (response.ok) {
+        console.log('Successfully stopped generation and TTS');
+        setIsGenerating(false);
+      } else {
+        console.error('Failed to stop generation');
+      }
+    } catch (error) {
+      console.error('Error stopping generation:', error);
+    } finally {
+      setIsStoppingGeneration(false);
+    }
+  };
+
   const toggleTTS = async () => {
     setIsTogglingTTS(true);
     try {
@@ -177,16 +175,13 @@ const ChatInterface = () => {
     }
   };
 
-  // ------------------- HANDLE STT TOGGLE -------------------
   const toggleSTT = async () => {
     setIsTogglingSTT(true);
     try {
       if (!isSttOn) {
-        // Turn ON: send "start-stt" action
         websocketRef.current.send(JSON.stringify({ action: 'start-stt' }));
         console.log('Sent action: start-stt');
       } else {
-        // Turn OFF: send "pause-stt" action
         websocketRef.current.send(JSON.stringify({ action: 'pause-stt' }));
         console.log('Sent action: pause-stt');
       }
@@ -197,7 +192,6 @@ const ChatInterface = () => {
     }
   };
 
-  // ------------------- HANDLE SENDING USER INPUT TO GPT -------------------
   const handleSend = async (userInput) => {
     if (!userInput.trim()) return;
 
@@ -210,32 +204,28 @@ const ChatInterface = () => {
 
     setMessages((prev) => [...prev, newMessage]);
     setInputMessage('');
-    setSttTranscript(''); // Clear transcript since it's "sent"
+    setSttTranscript('');
 
-    if (!isGenerating) {
-      setIsGenerating(true);
-      try {
-        const aiMessageId = Date.now() + 1;
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: aiMessageId,
-            sender: 'assistant',
-            text: '',
-            timestamp: new Date().toLocaleTimeString(),
-          },
-        ]);
+    setIsGenerating(true);
+    try {
+      const aiMessageId = Date.now() + 1;
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: aiMessageId,
+          sender: 'assistant',
+          text: '',
+          timestamp: new Date().toLocaleTimeString(),
+        },
+      ]);
 
-        // Send chat action over WebSocket
-        websocketRef.current.send(
-          JSON.stringify({ action: 'chat', messages: [...messagesRef.current, newMessage] }),
-        );
-        console.log('Sent action: chat with messages:', [...messagesRef.current, newMessage]);
-      } catch (error) {
-        console.error('Error sending message:', error);
-      } finally {
-        setIsGenerating(false);
-      }
+      websocketRef.current.send(
+        JSON.stringify({ action: 'chat', messages: [...messagesRef.current, newMessage] }),
+      );
+      console.log('Sent action: chat with messages:', [...messagesRef.current, newMessage]);
+    } catch (error) {
+      console.error('Error sending message:', error);
+      setIsGenerating(false);
     }
   };
 
@@ -246,7 +236,10 @@ const ChatInterface = () => {
         <h1 className="text-xl font-semibold text-gray-800">STT + TTS Chat</h1>
         <div className="flex items-center gap-4">
           {/* WebSocket Connection Status */}
-          <div title={wsConnectionStatus} className="flex items-center gap-1">
+          <div
+            title={wsConnectionStatus}
+            className="flex items-center gap-1"
+          >
             {wsConnectionStatus === 'connected' ? (
               <div className="text-green-500">
                 <Check className="w-4 h-4" />
@@ -262,6 +255,23 @@ const ChatInterface = () => {
             )}
             <span className="text-sm text-gray-600">{wsConnectionStatus}</span>
           </div>
+
+          {/* Stop Button */}
+          {isGenerating && (
+            <button
+              onClick={handleStop}
+              disabled={isStoppingGeneration}
+              className={`p-2 hover:bg-gray-100 rounded-full flex items-center gap-2 transition-all duration-200 
+                ${isStoppingGeneration ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+              title="Stop Generation and TTS"
+            >
+              {isStoppingGeneration ? (
+                <Loader2 className="w-5 h-5 animate-spin text-gray-600" />
+              ) : (
+                <Square className="w-5 h-5 text-red-500" fill="currentColor" />
+              )}
+            </button>
+          )}
 
           {/* TTS Toggle */}
           <button
@@ -335,14 +345,12 @@ const ChatInterface = () => {
       {/* INPUT + SEND */}
       <div className="border-t bg-white p-4">
         <div className="flex items-center gap-4 max-w-4xl mx-auto">
-          {/* Show recognized speech or typed text */}
           <input
             type="text"
             value={sttTranscript || inputMessage}
             onChange={(e) => {
-              // If user is typing manually, store it in inputMessage.
               setInputMessage(e.target.value);
-              setSttTranscript(''); // Clear if user is manually typing
+              setSttTranscript('');
             }}
             onKeyPress={(e) => {
               if (e.key === 'Enter' && (inputMessage.trim() || sttTranscript.trim())) {
