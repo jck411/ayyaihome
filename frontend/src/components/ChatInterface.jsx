@@ -2,6 +2,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Send, Settings, Loader2, Mic, MicOff, Volume2, VolumeX, X, Check } from 'lucide-react';
 
+const RECONNECT_INTERVAL = 3000; // 3 seconds, adjust as needed
+
 const ChatInterface = () => {
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
@@ -19,6 +21,7 @@ const ChatInterface = () => {
   const [isGenerating, setIsGenerating] = useState(false);
 
   // WebSocket connection status
+  // Possible values: 'connecting', 'connected', 'disconnected'
   const [wsConnectionStatus, setWsConnectionStatus] = useState('disconnected');
 
   // Refs for WebSocket and messages
@@ -31,18 +34,18 @@ const ChatInterface = () => {
     messagesRef.current = messages;
   }, [messages]);
 
-  // ------------------- SCROLL TO BOTTOM WHEN MESSAGES UPDATE -------------------
+  // Scroll to bottom when messages update
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // ------------------- WEBSOCKET for Unified Chat and STT -------------------
-  useEffect(() => {
-    // Open a WebSocket to communicate with the server
-    const ws = new WebSocket('ws://localhost:8000/ws/chat'); // Adjust if using SSL => wss://
-    websocketRef.current = ws;
-
+  /**
+   * Connect or reconnect the WebSocket.
+   */
+  const connectWebSocket = () => {
     setWsConnectionStatus('connecting');
+    const ws = new WebSocket('ws://localhost:8000/ws/chat');
+    websocketRef.current = ws;
 
     ws.onopen = () => {
       console.log('Connected to Unified Chat WebSocket');
@@ -86,7 +89,6 @@ const ChatInterface = () => {
           // Received GPT chat content
           const content = data.content;
           console.log(`Received GPT content: ${content}`);
-          // Append the content to the last assistant message
           setMessages((prev) => {
             // Find the last assistant message
             const lastIndex = prev.length - 1;
@@ -123,18 +125,34 @@ const ChatInterface = () => {
 
     ws.onerror = (error) => {
       console.error('Unified Chat WebSocket error:', error);
-      setWsConnectionStatus('disconnected');
+      // You can decide whether to close the connection on error, 
+      // or leave it open for the onclose to handle reconnection
+      ws.close();
     };
 
     ws.onclose = () => {
       console.log('Unified Chat WebSocket closed');
       setWsConnectionStatus('disconnected');
+      // Attempt to reconnect after a delay
+      setTimeout(() => {
+        console.log('Attempting to reconnect...');
+        connectWebSocket();
+      }, RECONNECT_INTERVAL);
     };
+  };
+
+  // Create the WebSocket connection when the component mounts
+  useEffect(() => {
+    connectWebSocket();
 
     // Cleanup on unmount
     return () => {
-      ws.close();
+      // If you want to stop reconnection attempts on unmount, close here
+      if (websocketRef.current) {
+        websocketRef.current.close();
+      }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ------------------- HANDLE TTS TOGGLE -------------------
@@ -228,10 +246,7 @@ const ChatInterface = () => {
         <h1 className="text-xl font-semibold text-gray-800">STT + TTS Chat</h1>
         <div className="flex items-center gap-4">
           {/* WebSocket Connection Status */}
-          <div
-            title={wsConnectionStatus}
-            className="flex items-center gap-1"
-          >
+          <div title={wsConnectionStatus} className="flex items-center gap-1">
             {wsConnectionStatus === 'connected' ? (
               <div className="text-green-500">
                 <Check className="w-4 h-4" />
