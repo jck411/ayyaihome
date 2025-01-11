@@ -213,6 +213,13 @@ def shutdown():
     print("Shutting down server...")
     audio_player.stop_stream()
     PyAudioSingleton.terminate()
+    stt_instance.pause_listening()
+    
+    # Free the port
+    try:
+        os.system('fuser -k 8000/tcp')
+    except:
+        pass
     print("Shutdown complete.")
 
 # Register the shutdown function
