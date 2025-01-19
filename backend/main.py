@@ -1,4 +1,4 @@
-import atexit
+
 import os
 import json
 import asyncio
@@ -7,23 +7,21 @@ import threading
 import openai
 import inspect
 import re
-import requests  
-from datetime import datetime, timedelta, timezone
-from timezonefinder import TimezoneFinder
-import pytz
+import requests
+from datetime import datetime
+from queue import Queue
 from typing import Any, AsyncIterator, Callable, Dict, List, Optional, Sequence, Tuple, Union
-import uuid
-import shutil
-from fastapi import FastAPI, HTTPException, APIRouter, Request, Response, File, UploadFile, WebSocket, WebSocketDisconnect
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+
+import uvicorn
 import pyaudio
 from dotenv import load_dotenv
 import azure.cognitiveservices.speech as speechsdk
-from queue import Queue
-import uvicorn
+import pytz
+from timezonefinder import TimezoneFinder
 
-load_dotenv()
+from fastapi import FastAPI, HTTPException, APIRouter, WebSocket, WebSocketDisconnect, Request, Response, File, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 
 # =====================================================================================
 # Global CONFIG
@@ -102,6 +100,8 @@ CONFIG = {
         "PRINT_FUNCTION_CALLS": True
     }
 }
+
+load_dotenv()
 
 # ========================= SELECT CHAT PROVIDER =========================
 API_HOST = CONFIG["API_SETTINGS"]["API_HOST"].lower()
@@ -194,29 +194,26 @@ class AudioPlayer:
 
 audio_player = AudioPlayer(pyaudio_instance)
 
-
 # =========== Global Stop Events ===========
 TTS_STOP_EVENT = asyncio.Event()
-"""
-Set TTS_STOP_EVENT when you want to force stop TTS processing mid-stream.
-"""
-
 GEN_STOP_EVENT = asyncio.Event()
-"""
-Set GEN_STOP_EVENT to stop text-generation chunk streaming from OpenAI mid-way.
-"""
 
 
 # ------------ Shutdown Handler ------------
 def shutdown():
+    """
+    Gracefully close streams, terminate PyAudio, etc.
+    """
     print("Shutting down server...")
     audio_player.stop_stream()
     PyAudioSingleton.terminate()
     print("Shutdown complete.")
 
-atexit.register(shutdown)
-signal.signal(signal.SIGINT, lambda sig, frame: shutdown())
-signal.signal(signal.SIGTERM, lambda sig, frame: shutdown())
+# (Optional) If you prefer to rely on the atexit mechanism, you can leave this in.
+# But in many cases the @app.on_event("shutdown") hook is enough.
+
+
+# NOTE: Removed custom signal.signal(...) calls so that uvicorn can properly handle Ctrl+C.
 
 
 # =========== Azure STT Class ===========
@@ -356,7 +353,7 @@ def get_tools():
     ]
 
 def get_available_functions():
-    return { 
+    return {
         "fetch_weather": fetch_weather,
         "get_time": get_time
     }
@@ -439,7 +436,7 @@ async def azure_text_to_speech_processor(phrase_queue: asyncio.Queue,
         prosody = CONFIG["TTS_MODELS"]["AZURE_TTS"]["PROSODY"]
         voice = CONFIG["TTS_MODELS"]["AZURE_TTS"]["TTS_VOICE"]
         audio_format = getattr(
-            speechsdk.SpeechSynthesisOutputFormat, 
+            speechsdk.SpeechSynthesisOutputFormat,
             CONFIG["TTS_MODELS"]["AZURE_TTS"]["AUDIO_FORMAT"]
         )
         speech_config.set_speech_synthesis_output_format(audio_format)
@@ -531,6 +528,7 @@ async def openai_text_to_speech_processor(phrase_queue: asyncio.Queue,
                             break
                         await audio_queue.put(audio_chunk)
 
+                # Add a small buffer of silence between chunks
                 await audio_queue.put(b'\x00' * chunk_size)
                 conditional_print("OpenAI TTS synthesis completed for phrase.", "default")
 
@@ -549,6 +547,7 @@ async def process_streams(phrase_queue: asyncio.Queue, audio_queue: asyncio.Queu
     Orchestrates TTS tasks + audio playback, with an external stop_event.
     """
     if not CONFIG["GENERAL_TTS"]["TTS_ENABLED"]:
+        # Just drain phrase_queue if TTS is disabled
         while True:
             phrase = await phrase_queue.get()
             if phrase is None:
@@ -688,7 +687,7 @@ async def stream_openai_completion(messages: Sequence[Dict[str, Union[str, Any]]
             temperature=0.7,
             top_p=1.0,
         )
-        
+
         tool_calls = []
 
         # 2) Consume the streamed chunks in a loop
@@ -696,27 +695,21 @@ async def stream_openai_completion(messages: Sequence[Dict[str, Union[str, Any]]
             # If user triggers the stop event in the middle of streaming
             if GEN_STOP_EVENT.is_set():
                 try:
-                    # Official OpenAI Python library typically provides an async close() method
                     await response.close()
                 except Exception as e:
                     conditional_print(f"Error closing streaming response: {e}", "default")
-                
+
                 conditional_print("GEN_STOP_EVENT triggered. Stopping text generation mid-stream.", "default")
-                break  # <-- valid here, because we are inside `async for ... in response:` loop
+                break
 
             # Otherwise, parse this chunk
             delta = chunk.choices[0].delta if chunk.choices and chunk.choices[0].delta else None
             if delta and delta.content:
-                # Send the content to the caller
                 yield delta.content
-                # Send the chunk along for TTS chunk-processor
                 await chunk_queue.put(chunk)
             elif delta and delta.tool_calls:
-                # ... handle tool_calls as usual ...
-                # (append them to `tool_calls` so we can process them after)
                 tc_list = delta.tool_calls
                 for tc_chunk in tc_list:
-                    # Expand the tool_calls array if needed
                     while len(tool_calls) <= tc_chunk.index:
                         tool_calls.append({"id": "", "type": "function", "function": {"name": "", "arguments": ""}})
 
@@ -784,6 +777,7 @@ async def stream_openai_completion(messages: Sequence[Dict[str, Union[str, Any]]
     except Exception as e:
         await chunk_queue.put(None)
         raise HTTPException(status_code=500, detail=f"OpenAI API error: {e}")
+
 
 # =========== FastAPI Setup ===========
 app = FastAPI()
@@ -900,7 +894,6 @@ async def unified_chat_websocket(websocket: WebSocket):
                 # Stream the chat completion
                 try:
                     async for content in stream_openai_completion(validated, phrase_queue):
-                        # If generation was stopped mid-stream, break
                         if GEN_STOP_EVENT.is_set():
                             conditional_print("GEN_STOP_EVENT is set, halting chat streaming to client.", "default")
                             break
@@ -926,13 +919,24 @@ async def unified_chat_websocket(websocket: WebSocket):
         await websocket.close()
 
 
+# =========== Use FastAPI's built-in shutdown event ===========
+@app.on_event("shutdown")
+def shutdown_event():
+    """
+    This hook is called by FastAPI (and thus by Uvicorn) when the server is shutting down.
+    It's a good place to do final cleanup, close connections, etc.
+    """
+    shutdown()
+
+
 # =========== Include Routers & Run ===========
 app.include_router(router)
 
 if __name__ == '__main__':
+    # Let uvicorn handle Ctrl+C and signals cleanly.
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
         port=8000,
-        reload=True
+        reload=True  # Set to True if you want auto-reload in dev
     )

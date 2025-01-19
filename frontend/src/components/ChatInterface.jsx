@@ -168,6 +168,10 @@ const ChatInterface = () => {
     }
   };
 
+  /**
+   * Toggles TTS enabled state. When TTS is being turned off, the endpoint
+   * to stop TTS is also hit immediately.
+   */
   const toggleTTS = async () => {
     setIsTogglingTTS(true);
     try {
@@ -180,6 +184,19 @@ const ChatInterface = () => {
         console.log(
           `TTS toggled: ${data.tts_enabled ? 'Enabled' : 'Disabled'}`,
         );
+
+        // If TTS is now disabled, immediately hit the stop TTS endpoint.
+        if (!data.tts_enabled) {
+          const stopTtsResponse = await fetch(
+            'http://localhost:8000/api/stop-tts',
+            { method: 'POST' },
+          );
+          if (!stopTtsResponse.ok) {
+            console.error('Failed to stop TTS:', stopTtsResponse.status);
+          } else {
+            console.log('TTS stopped successfully.');
+          }
+        }
       } else {
         console.error('Failed to toggle TTS');
       }
