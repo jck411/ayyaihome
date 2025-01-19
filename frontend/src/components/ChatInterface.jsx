@@ -1,5 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Settings, Loader2, Mic, MicOff, Volume2, VolumeX, X, Check, Square } from 'lucide-react';
+import {
+  Send,
+  Settings,
+  Loader2,
+  Mic,
+  MicOff,
+  Volume2,
+  VolumeX,
+  X,
+  Check,
+  Square,
+} from 'lucide-react';
 
 const ChatInterface = () => {
   const [messages, setMessages] = useState([]);
@@ -21,12 +32,12 @@ const ChatInterface = () => {
   // WebSocket connection status
   const [wsConnectionStatus, setWsConnectionStatus] = useState('disconnected');
 
-  // Refs for WebSocket and messages
+  // Refs
   const messagesEndRef = useRef(null);
   const websocketRef = useRef(null);
   const messagesRef = useRef(messages);
 
-  // Update messagesRef whenever messages change
+  // Keep messagesRef up to date
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
@@ -36,7 +47,7 @@ const ChatInterface = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // WebSocket setup
+  // Setup WebSocket on mount
   useEffect(() => {
     const ws = new WebSocket('ws://localhost:8000/ws/chat');
     websocketRef.current = ws;
@@ -52,51 +63,40 @@ const ChatInterface = () => {
       try {
         const data = JSON.parse(event.data);
 
+        // Check if STT text is present
         if (data.stt_text) {
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: Date.now(),
-              sender: 'user',
-              text: data.stt_text,
-              timestamp: new Date().toLocaleTimeString(),
-            },
-          ]);
+          const sttMsg = {
+            id: Date.now(),
+            sender: 'user',
+            text: data.stt_text,
+            timestamp: new Date().toLocaleTimeString(),
+          };
+          setMessages((prev) => [...prev, sttMsg]);
 
+          // Now send that STT text back for GPT response
           setIsGenerating(true);
           websocketRef.current.send(
             JSON.stringify({
               action: 'chat',
-              messages: [
-                ...messagesRef.current,
-                {
-                  id: Date.now(),
-                  sender: 'user',
-                  text: data.stt_text,
-                  timestamp: new Date().toLocaleTimeString(),
-                },
-              ],
+              messages: [...messagesRef.current, sttMsg],
             }),
           );
         }
 
+        // Check if new GPT content chunk arrived
         if (data.content) {
           const content = data.content;
           console.log(`Received GPT content: ${content}`);
-          
-          if (data.done === true) {
-            setIsGenerating(false);
-          }
-          
           setMessages((prev) => {
             const lastIndex = prev.length - 1;
+            // If last message is assistant, append
             if (prev[lastIndex] && prev[lastIndex].sender === 'assistant') {
-              const updatedMessage = {
-                ...prev[lastIndex],
-                text: prev[lastIndex].text + content,
-              };
-              return [...prev.slice(0, lastIndex), updatedMessage];
+              return [
+                ...prev.slice(0, lastIndex),
+                { ...prev[lastIndex], text: prev[lastIndex].text + content },
+              ];
             } else {
+              // Otherwise create a new message
               return [
                 ...prev,
                 {
@@ -110,6 +110,7 @@ const ChatInterface = () => {
           });
         }
 
+        // Check if STT is on/off
         if (data.is_listening !== undefined) {
           setIsSttOn(data.is_listening);
           console.log(`STT is now ${data.is_listening ? 'ON' : 'OFF'}`);
@@ -134,21 +135,34 @@ const ChatInterface = () => {
     };
   }, []);
 
+  /**
+   * Handles "Stop" button. We call *both* `/api/stop-generation` and `/api/stop-tts`
+   * so that text-generation and TTS both stop.
+   */
   const handleStop = async () => {
     setIsStoppingGeneration(true);
     try {
-      const response = await fetch('http://localhost:8000/api/stop', {
-        method: 'POST',
-      });
+      // Make both requests in parallel
+      const [genRes, ttsRes] = await Promise.all([
+        fetch('http://localhost:8000/api/stop-generation', {
+          method: 'POST',
+        }),
+        fetch('http://localhost:8000/api/stop-tts', {
+          method: 'POST',
+        }),
+      ]);
 
-      if (response.ok) {
-        console.log('Successfully stopped generation and TTS');
-        setIsGenerating(false);
-      } else {
-        console.error('Failed to stop generation');
+      if (!genRes.ok) {
+        console.error('Failed to stop generation:', genRes.status);
       }
+      if (!ttsRes.ok) {
+        console.error('Failed to stop TTS:', ttsRes.status);
+      }
+
+      console.log('Stop requests sent to both generation & TTS endpoints.');
+      setIsGenerating(false);
     } catch (error) {
-      console.error('Error stopping generation:', error);
+      console.error('Error stopping generation and TTS:', error);
     } finally {
       setIsStoppingGeneration(false);
     }
@@ -160,11 +174,12 @@ const ChatInterface = () => {
       const response = await fetch('http://localhost:8000/api/toggle-tts', {
         method: 'POST',
       });
-
       if (response.ok) {
         const data = await response.json();
         setTtsEnabled(data.tts_enabled);
-        console.log(`TTS toggled: ${data.tts_enabled ? 'Enabled' : 'Disabled'}`);
+        console.log(
+          `TTS toggled: ${data.tts_enabled ? 'Enabled' : 'Disabled'}`,
+        );
       } else {
         console.error('Failed to toggle TTS');
       }
@@ -179,11 +194,11 @@ const ChatInterface = () => {
     setIsTogglingSTT(true);
     try {
       if (!isSttOn) {
+        // Turn STT on
         websocketRef.current.send(JSON.stringify({ action: 'start-stt' }));
-        console.log('Sent action: start-stt');
       } else {
+        // Turn STT off
         websocketRef.current.send(JSON.stringify({ action: 'pause-stt' }));
-        console.log('Sent action: pause-stt');
       }
     } catch (error) {
       console.error('Error toggling STT:', error);
@@ -208,6 +223,7 @@ const ChatInterface = () => {
 
     setIsGenerating(true);
     try {
+      // Insert a placeholder assistant message so we can append to it
       const aiMessageId = Date.now() + 1;
       setMessages((prev) => [
         ...prev,
@@ -220,9 +236,15 @@ const ChatInterface = () => {
       ]);
 
       websocketRef.current.send(
-        JSON.stringify({ action: 'chat', messages: [...messagesRef.current, newMessage] }),
+        JSON.stringify({
+          action: 'chat',
+          messages: [...messagesRef.current, newMessage],
+        }),
       );
-      console.log('Sent action: chat with messages:', [...messagesRef.current, newMessage]);
+      console.log(
+        'Sent action: chat with messages:',
+        [...messagesRef.current, newMessage],
+      );
     } catch (error) {
       console.error('Error sending message:', error);
       setIsGenerating(false);
@@ -233,13 +255,12 @@ const ChatInterface = () => {
     <div className="flex flex-col h-screen bg-gray-100">
       {/* TOP BAR */}
       <div className="bg-white shadow-sm p-4 flex justify-between items-center">
-        <h1 className="text-xl font-semibold text-gray-800">STT + TTS Chat</h1>
+        <h1 className="text-xl font-semibold text-gray-800">
+          STT + TTS Chat
+        </h1>
         <div className="flex items-center gap-4">
           {/* WebSocket Connection Status */}
-          <div
-            title={wsConnectionStatus}
-            className="flex items-center gap-1"
-          >
+          <div title={wsConnectionStatus} className="flex items-center gap-1">
             {wsConnectionStatus === 'connected' ? (
               <div className="text-green-500">
                 <Check className="w-4 h-4" />
@@ -262,7 +283,11 @@ const ChatInterface = () => {
               onClick={handleStop}
               disabled={isStoppingGeneration}
               className={`p-2 hover:bg-gray-100 rounded-full flex items-center gap-2 transition-all duration-200 
-                ${isStoppingGeneration ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                ${
+                  isStoppingGeneration
+                    ? 'opacity-50 cursor-not-allowed'
+                    : 'cursor-pointer'
+                }`}
               title="Stop Generation and TTS"
             >
               {isStoppingGeneration ? (
@@ -278,15 +303,25 @@ const ChatInterface = () => {
             onClick={toggleTTS}
             disabled={isTogglingTTS}
             className={`p-2 hover:bg-gray-100 rounded-full flex items-center gap-2 transition-all duration-200 
-              ${isTogglingTTS ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+              ${
+                isTogglingTTS
+                  ? 'opacity-50 cursor-not-allowed'
+                  : 'cursor-pointer'
+              }`}
             title={ttsEnabled ? 'Text-to-Speech Enabled' : 'Text-to-Speech Disabled'}
           >
             {isTogglingTTS ? (
               <Loader2 className="w-5 h-5 animate-spin text-gray-600" />
             ) : ttsEnabled ? (
-              <Volume2 className="w-5 h-5 text-green-500" title="Backend TTS Enabled" />
+              <Volume2
+                className="w-5 h-5 text-green-500"
+                title="Backend TTS Enabled"
+              />
             ) : (
-              <VolumeX className="w-5 h-5 text-gray-400" title="Backend TTS Disabled" />
+              <VolumeX
+                className="w-5 h-5 text-gray-400"
+                title="Backend TTS Disabled"
+              />
             )}
           </button>
 
@@ -295,7 +330,11 @@ const ChatInterface = () => {
             onClick={toggleSTT}
             disabled={isTogglingSTT}
             className={`p-2 hover:bg-gray-100 rounded-full flex items-center gap-2 transition-all duration-200 
-              ${isTogglingSTT ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+              ${
+                isTogglingSTT
+                  ? 'opacity-50 cursor-not-allowed'
+                  : 'cursor-pointer'
+              }`}
             title={isSttOn ? 'STT is ON. Click to Pause' : 'STT is OFF. Click to Start'}
           >
             {isTogglingSTT ? (
@@ -325,7 +364,9 @@ const ChatInterface = () => {
           >
             <div
               className={`max-w-[80%] rounded-lg p-4 ${
-                message.sender === 'user' ? 'bg-blue-500 text-white' : 'bg-white text-gray-800'
+                message.sender === 'user'
+                  ? 'bg-blue-500 text-white'
+                  : 'bg-white text-gray-800'
               } shadow-sm`}
             >
               <div className="text-sm whitespace-pre-wrap">{message.text}</div>
@@ -353,7 +394,10 @@ const ChatInterface = () => {
               setSttTranscript('');
             }}
             onKeyPress={(e) => {
-              if (e.key === 'Enter' && (inputMessage.trim() || sttTranscript.trim())) {
+              if (
+                e.key === 'Enter' &&
+                (inputMessage.trim() || sttTranscript.trim())
+              ) {
                 handleSend(sttTranscript || inputMessage);
               }
             }}
